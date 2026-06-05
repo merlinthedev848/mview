@@ -9,15 +9,21 @@ echo -e "\033[1;36m=============================================================
 echo -e "\033[1;36m  Deploying mView Sentinel — The Ultimate Linux NVR Server  \033[0m"
 echo -e "\033[1;36m=============================================================\033[0m"
 
-# 1. System Requirements Check
+# 1. System Requirements Check & Auto-Install Docker
 echo -e "\n\033[1;33m[1/5] Checking system dependencies...\033[0m"
 if ! command -v docker &> /dev/null; then
-    echo "Docker is required. Please install Docker and Docker Compose."
-    exit 1
+    echo "Docker not found. Installing Docker automatically..."
+    export DEBIAN_FRONTEND=noninteractive
+    curl -fsSL https://get.docker.com -o get-docker.sh
+    sh get-docker.sh
+    rm get-docker.sh
+    echo "Docker installed successfully."
 fi
-if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
-    echo "Docker Compose is required."
-    exit 1
+
+# Ensure Docker Compose plugin is available
+if ! docker compose version &> /dev/null; then
+    echo "Docker Compose plugin not found. Attempting to install..."
+    apt-get update -yq && apt-get install -yq docker-compose-plugin
 fi
 
 # 2. Clone Repository

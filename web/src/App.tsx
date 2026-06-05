@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import LiveView from './pages/LiveView';
 import Playback from './pages/Playback';
 import Events from './pages/Events';
+import MapView from './pages/MapView';
 import Settings from './pages/Settings';
 
 const Sidebar = () => {
@@ -15,6 +16,7 @@ const Sidebar = () => {
     { path: '/', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
     { path: '/live', label: 'Live View', icon: <Video size={20} /> },
     { path: '/playback', label: 'Playback', icon: <PlaySquare size={20} /> },
+    { path: '/events', label: 'Events', icon: <Video size={20} /> },
     { path: '/map', label: 'Map View', icon: <MapIcon size={20} /> },
     { path: '/settings', label: 'Settings', icon: <SettingsIcon size={20} /> },
   ];
@@ -100,8 +102,9 @@ function App() {
             <Route path="/live" element={<LiveView />} />
             <Route path="/playback" element={<Playback />} />
             <Route path="/events" element={<Events />} />
+            <Route path="/map" element={<MapView />} />
             <Route path="/settings" element={<Settings />} />
-            <Route path="*" element={<div style={{padding: '3rem', textAlign: 'center', color: 'var(--text-muted)'}}><h1>404</h1><p>Component under construction for Phase 1/2</p></div>} />
+            <Route path="*" element={<div style={{padding: '3rem', textAlign: 'center', color: 'var(--text-muted)'}}><h1>404</h1><p>Component under construction</p></div>} />
           </Routes>
         </main>
       </div>
