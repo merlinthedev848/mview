@@ -2,9 +2,10 @@
 FROM node:20-alpine AS frontend-builder
 WORKDIR /app/web
 COPY web/package*.json ./
-RUN npm ci
+# Use npm install (not ci) — works even without a lockfile
+RUN npm install
 COPY web/ ./
-RUN npm run build
+RUN npm run build && echo "=== Frontend build complete ==" && ls -la dist/
 
 # Stage 2: Python API + ffmpeg recorder
 FROM python:3.11-slim
