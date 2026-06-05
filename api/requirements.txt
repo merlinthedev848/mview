@@ -19,3 +19,4 @@ onvif-zeep==0.2.12
 wsdiscovery==2.0.0
 pgvector==0.3.2
 netifaces==0.11.0
+psutil==6.0.0
