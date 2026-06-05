@@ -8,7 +8,7 @@ import datetime
 
 router = APIRouter(prefix="/events", tags=["events"])
 
-@router.get("/")
+@router.get("")
 async def get_events(
     camera_id: Optional[str] = None,
     object_class: Optional[str] = None,

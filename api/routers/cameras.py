@@ -12,24 +12,26 @@ from api.services.recorder import recorder_manager
 router = APIRouter(prefix="/cameras", tags=["Cameras"])
 
 
-@router.get("/", response_model=List[CameraResponse])
+async def _refresh_recorder(db: AsyncSession):
+    result = await db.execute(select(Camera))
+    await recorder_manager.sync_cameras(result.scalars().all())
+
+
+@router.get("", response_model=List[CameraResponse])
 async def get_cameras(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Camera))
     return result.scalars().all()
 
 
-@router.post("/", response_model=CameraResponse)
+@router.post("", response_model=CameraResponse, status_code=201)
 async def create_camera(camera: CameraCreate, db: AsyncSession = Depends(get_db)):
-    new_camera = Camera(**camera.model_dump())
-    new_camera.status = "online"
-    db.add(new_camera)
+    data = camera.model_dump()
+    new_cam = Camera(**data)
+    db.add(new_cam)
     await db.commit()
-    await db.refresh(new_camera)
-    # Start recording immediately
-    await recorder_manager.sync_cameras(
-        (await db.execute(select(Camera))).scalars().all()
-    )
-    return new_camera
+    await db.refresh(new_cam)
+    await _refresh_recorder(db)
+    return new_cam
 
 
 @router.patch("/{camera_id}", response_model=CameraResponse)
@@ -38,13 +40,11 @@ async def update_camera(camera_id: str, update: CameraUpdate, db: AsyncSession =
     cam = result.scalar_one_or_none()
     if not cam:
         raise HTTPException(404, "Camera not found")
-    for field, value in update.model_dump(exclude_unset=True).items():
-        setattr(cam, field, value)
+    for k, v in update.model_dump(exclude_unset=True).items():
+        setattr(cam, k, v)
     await db.commit()
     await db.refresh(cam)
-    await recorder_manager.sync_cameras(
-        (await db.execute(select(Camera))).scalars().all()
-    )
+    await _refresh_recorder(db)
     return cam
 
 
@@ -56,34 +56,31 @@ async def delete_camera(camera_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(404, "Camera not found")
     await db.delete(cam)
     await db.commit()
-    await recorder_manager.sync_cameras(
-        (await db.execute(select(Camera))).scalars().all()
-    )
+    await _refresh_recorder(db)
     return {"status": "deleted"}
 
 
 @router.post("/discover", response_model=List[ONVIFDiscoveryResult])
 async def discover_cameras():
-    """Scan the network for ONVIF cameras (WS-Discovery + IP range fallback)."""
+    """Scan network for ONVIF cameras (WS-Discovery + IP range scan fallback)."""
     try:
-        results = await onvif_service.discover_cameras(timeout=4)
-        return results
+        return await onvif_service.discover_cameras(timeout=4)
     except Exception as e:
         raise HTTPException(500, f"Discovery failed: {e}")
 
 
-@router.post("/adopt", response_model=CameraResponse)
+@router.post("/adopt", response_model=CameraResponse, status_code=201)
 async def adopt_camera(
-    discovery_data: ONVIFDiscoveryResult,
+    data: ONVIFDiscoveryResult,
     username: str = "admin",
     password: str = "admin",
     db: AsyncSession = Depends(get_db),
 ):
-    """Probe a discovered camera for its RTSP streams and save it."""
+    """Probe a discovered device for RTSP streams, then save it."""
     import asyncio
     streams = await asyncio.to_thread(
         onvif_service.get_camera_streams,
-        discovery_data.ip, 80, username, password
+        data.ip, 80, username, password
     )
 
     if streams:
@@ -91,20 +88,20 @@ async def adopt_camera(
         rtsp_sub  = streams[1].get("rtsp_url") if len(streams) > 1 else None
         resolution = streams[0].get("resolution")
     else:
-        # Fallback: build a standard RTSP URL even if ONVIF probe fails
-        rtsp_main = f"rtsp://{username}:{password}@{discovery_data.ip}:554/stream1"
-        rtsp_sub  = f"rtsp://{username}:{password}@{discovery_data.ip}:554/stream2"
+        # Standard fallback — works on the vast majority of cameras
+        rtsp_main = f"rtsp://{username}:{password}@{data.ip}:554/stream1"
+        rtsp_sub  = f"rtsp://{username}:{password}@{data.ip}:554/stream2"
         resolution = None
 
     cam = Camera(
-        name=f"{discovery_data.manufacturer} {discovery_data.model} ({discovery_data.ip})",
+        name=f"{data.manufacturer} {data.model} ({data.ip})",
         rtsp_url_main=rtsp_main,
         rtsp_url_sub=rtsp_sub,
-        onvif_endpoint=discovery_data.onvif_endpoint,
+        onvif_endpoint=data.onvif_endpoint,
         onvif_username=username,
         onvif_password=password,
-        manufacturer=discovery_data.manufacturer,
-        model=discovery_data.model,
+        manufacturer=data.manufacturer,
+        model=data.model,
         resolution=resolution,
         status="online",
         auto_adopted=True,
@@ -112,7 +109,5 @@ async def adopt_camera(
     db.add(cam)
     await db.commit()
     await db.refresh(cam)
-    await recorder_manager.sync_cameras(
-        (await db.execute(select(Camera))).scalars().all()
-    )
+    await _refresh_recorder(db)
     return cam
