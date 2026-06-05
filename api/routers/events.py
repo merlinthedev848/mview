@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from api.database import get_db
-from api.models.event import Event
+from api.models.ai import SemanticEvent as Event
 from typing import List, Optional
 import datetime
 
