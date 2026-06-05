@@ -39,7 +39,9 @@ INSTALL_DIR="/opt/mview-sentinel"
 if [ -d "$INSTALL_DIR" ]; then
     echo "Directory $INSTALL_DIR already exists. Updating..."
     cd $INSTALL_DIR
-    git pull
+    git fetch --all
+    git reset --hard origin/main
+    git clean -fd
 else
     git clone https://github.com/merlinthedev848/mview.git $INSTALL_DIR
     cd $INSTALL_DIR
