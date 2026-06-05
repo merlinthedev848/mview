@@ -9,24 +9,24 @@
   --bg-card-hover:rgba(16, 26, 44, 0.98);
   --bg-input:     rgba(0, 0, 0, 0.45);
 
-  /* Primary — Neon Cyan (persons, highlights, active) */
-  --cyan:         #00f0d4;
-  --cyan-bright:  #00ffea;
-  --cyan-dim:     rgba(0, 240, 212, 0.10);
-  --cyan-glow:    rgba(0, 240, 212, 0.40);
-  --cyan-border:  rgba(0, 240, 212, 0.28);
+  /* Primary — Neon Green (persons, highlights, active) */
+  --cyan:         #39ff14;
+  --cyan-bright:  #70ff5c;
+  --cyan-dim:     rgba(57, 255, 20, 0.10);
+  --cyan-glow:    rgba(57, 255, 20, 0.40);
+  --cyan-border:  rgba(57, 255, 20, 0.28);
 
-  /* Secondary — Neon Magenta/Pink (vehicles, accent) */
-  --pink:         #d946ef;
-  --pink-bright:  #f0abfc;
-  --pink-dim:     rgba(217, 70, 239, 0.12);
-  --pink-glow:    rgba(217, 70, 239, 0.40);
-  --pink-border:  rgba(217, 70, 239, 0.28);
+  /* Secondary — Neon Pink (vehicles, accent) */
+  --pink:         #ff00ff;
+  --pink-bright:  #ff66ff;
+  --pink-dim:     rgba(255, 0, 255, 0.12);
+  --pink-glow:    rgba(255, 0, 255, 0.40);
+  --pink-border:  rgba(255, 0, 255, 0.28);
 
-  /* Active nav — Purple/Violet pill (matches mockup exactly) */
-  --nav-active-bg:   rgba(124, 58, 237, 0.22);
-  --nav-active-text: #a78bfa;
-  --nav-active-border: rgba(124, 58, 237, 0.5);
+  /* Active nav — Pink pill */
+  --nav-active-bg:   rgba(255, 0, 255, 0.18);
+  --nav-active-text: #ff66ff;
+  --nav-active-border: rgba(255, 0, 255, 0.5);
 
   /* Status */
   --green:        #22c55e;
