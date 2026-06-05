@@ -1,134 +1,168 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Plus, CheckCircle, Shield, Settings2, Video, HardDrive } from 'lucide-react';
+import React, { useState } from 'react';
+import { Settings as SettingsIcon, Search, Plus, Save, Server, Shield, Bell } from 'lucide-react';
 
-const DiscoveryModal = ({ onClose }: { onClose: () => void }) => {
-  const [isScanning, setIsScanning] = useState(true);
-  const [discovered, setDiscovered] = useState<any[]>([]);
+export const Settings = () => {
+  const [activeTab, setActiveTab] = useState('cameras');
+  const [isScanning, setIsScanning] = useState(false);
+  const [discoveredCameras, setDiscoveredCameras] = useState([]);
 
-  useEffect(() => {
-    // Simulate network scan
-    const timer = setTimeout(() => {
-      setDiscovered([
-        { id: 1, ip: '192.168.1.101', brand: 'Hikvision', model: 'DS-2CD2043G0-I', streams: '4K / 1080p', status: 'pending' },
-        { id: 2, ip: '192.168.1.105', brand: 'Dahua', model: 'IPC-HFW4431R-Z', streams: '4MP / 720p', status: 'pending' },
-        { id: 3, ip: '192.168.1.110', brand: 'Reolink', model: 'RLC-810A', streams: '4K / 480p', status: 'pending' }
-      ]);
-      setIsScanning(false);
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, []);
+  const scanNetwork = async () => {
+    setIsScanning(true);
+    setDiscoveredCameras([]);
+    try {
+      // Hit the real FastAPI endpoint which triggers WS-Discovery
+      const res = await fetch('http://localhost:8000/cameras/discover', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        // data should be an array of discovered ONVIF devices
+        setDiscoveredCameras(data || []);
+      }
+    } catch (e) {
+      console.error("Discovery failed", e);
+    }
+    setIsScanning(false);
+  };
 
-  const handleAdopt = (id: number) => {
-    setDiscovered(prev => prev.map(cam => cam.id === id ? { ...cam, status: 'adopting' } : cam));
-    setTimeout(() => {
-      setDiscovered(prev => prev.map(cam => cam.id === id ? { ...cam, status: 'adopted' } : cam));
-    }, 1500);
+  const adoptCamera = async (cam: any) => {
+    try {
+      await fetch('http://localhost:8000/cameras/adopt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: cam.url, username: 'admin', password: 'password' })
+      });
+      // Remove from discovered list once adopted
+      setDiscoveredCameras(prev => prev.filter((c: any) => c.url !== cam.url));
+      alert("Camera adopted successfully!");
+    } catch (e) {
+      alert("Failed to adopt camera.");
+    }
   };
 
   return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
-    }}>
-      <div className="glass-panel" style={{ width: '800px', maxWidth: '90vw', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Search color="var(--color-primary)" /> Auto-Discover Cameras
-          </h2>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '1.5rem' }}>&times;</button>
-        </div>
-
-        {isScanning ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '3rem', gap: '1rem' }}>
-            {/* Custom pure CSS radar scan animation */}
-            <div style={{ width: '100px', height: '100px', borderRadius: '50%', background: 'rgba(0, 212, 255, 0.1)', position: 'relative', overflow: 'hidden', border: '1px solid var(--color-primary)' }}>
-              <div style={{ position: 'absolute', top: 0, left: '50%', width: '50%', height: '50%', background: 'linear-gradient(to right, rgba(0,212,255,0), rgba(0,212,255,0.8))', transformOrigin: 'bottom left', animation: 'scan-radar 2s linear infinite' }}></div>
-            </div>
-            <p style={{ color: 'var(--color-primary)' }}>Scanning local network via ONVIF WS-Discovery...</p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <p style={{ color: 'var(--color-success)' }}>Found {discovered.length} compatible devices.</p>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {discovered.map(cam => (
-                <div key={cam.id} className="glass-panel" style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)' }}>
-                  <div>
-                    <strong style={{ fontSize: '1.1rem' }}>{cam.brand} {cam.model}</strong>
-                    <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
-                      <span>IP: {cam.ip}</span>
-                      <span>Streams: {cam.streams}</span>
-                    </div>
-                  </div>
-                  <div>
-                    {cam.status === 'pending' && (
-                      <button className="btn-primary" onClick={() => handleAdopt(cam.id)}>Adopt</button>
-                    )}
-                    {cam.status === 'adopting' && (
-                      <button className="btn-primary" disabled style={{ opacity: 0.7 }}>Adopting...</button>
-                    )}
-                    {cam.status === 'adopted' && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--color-success)', fontWeight: 'bold' }}>
-                        <CheckCircle size={20} /> Adopted
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {!isScanning && discovered.some(c => c.status === 'pending') && (
-          <div style={{ alignSelf: 'flex-end', marginTop: '1rem' }}>
-            <button className="btn-success" onClick={() => discovered.forEach(c => c.status === 'pending' && handleAdopt(c.id))}>
-              Adopt All Devices
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-export const Settings = () => {
-  const [showDiscovery, setShowDiscovery] = useState(false);
-
-  return (
-    <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+    <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
       <header style={{ marginBottom: '2rem' }}>
-        <h1 className="text-gradient" style={{ fontSize: '2rem' }}>System Settings</h1>
+        <h1 className="text-gradient" style={{ fontSize: '2rem', margin: 0 }}>System Configuration</h1>
+        <p style={{ color: 'var(--text-muted)', margin: 0 }}>Manage hardware, AI pipelines, and rules</p>
       </header>
 
       <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: '2rem' }}>
         {/* Settings Sidebar */}
-        <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', height: 'fit-content' }}>
-          <div style={{ padding: '0.75rem 1rem', background: 'var(--surface-glass-hover)', borderRadius: '8px', borderLeft: '3px solid var(--color-primary)', display: 'flex', alignItems: 'center', gap: '10px' }}><Video size={18} /> Cameras</div>
-          <div style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-muted)' }}><Shield size={18} /> AI Detection</div>
-          <div style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-muted)' }}><HardDrive size={18} /> Storage</div>
-          <div style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-muted)' }}><Settings2 size={18} /> General</div>
+        <div className="glass-panel" style={{ padding: '1rem', height: 'fit-content' }}>
+          {[
+            { id: 'cameras', label: 'Cameras & Hardware', icon: <Server size={18} /> },
+            { id: 'ai', label: 'AI & Detection', icon: <Shield size={18} /> },
+            { id: 'notifications', label: 'Notifications', icon: <Bell size={18} /> },
+            { id: 'system', label: 'System', icon: <SettingsIcon size={18} /> },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '12px 16px',
+                background: activeTab === tab.id ? 'var(--surface-glass-hover)' : 'transparent',
+                border: 'none',
+                borderRadius: '8px',
+                color: activeTab === tab.id ? 'var(--color-primary)' : 'var(--text-main)',
+                cursor: 'pointer',
+                textAlign: 'left',
+                fontWeight: activeTab === tab.id ? 600 : 500,
+                transition: 'all 0.2s',
+                marginBottom: '4px'
+              }}
+            >
+              {tab.icon} {tab.label}
+            </button>
+          ))}
         </div>
 
-        {/* Settings Content */}
-        <div className="glass-panel" style={{ padding: '2rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-            <h2>Configured Cameras</h2>
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <button style={{ background: 'transparent', border: '1px solid var(--surface-border)', color: '#fff', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <Plus size={18} /> Add Manually
-              </button>
-              <button className="btn-primary" onClick={() => setShowDiscovery(true)} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <Search size={18} /> Discover Cameras
-              </button>
-            </div>
-          </div>
+        {/* Content Area */}
+        <div className="glass-panel" style={{ padding: '2rem', minHeight: '600px' }}>
+          {activeTab === 'cameras' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                <h2>Camera Management</h2>
+                <button 
+                  className="btn btn-primary" 
+                  onClick={scanNetwork}
+                  disabled={isScanning}
+                >
+                  <Search size={18} />
+                  {isScanning ? 'Scanning Network...' : 'Auto-Discover ONVIF'}
+                </button>
+              </div>
 
-          <p style={{ color: 'var(--text-muted)' }}>No cameras configured yet. Click "Discover Cameras" to automatically find and adopt devices on your local network.</p>
+              {/* Discovery Results */}
+              {discoveredCameras.length > 0 && (
+                <div style={{ marginBottom: '2rem' }}>
+                  <h3 style={{ color: 'var(--color-accent)', marginBottom: '1rem' }}>Discovered Devices</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {discoveredCameras.map((cam: any, i: number) => (
+                      <div key={i} style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center',
+                        padding: '1rem',
+                        background: 'rgba(0,212,255,0.05)',
+                        border: '1px solid var(--surface-border-highlight)',
+                        borderRadius: '8px'
+                      }}>
+                        <div>
+                          <div style={{ fontWeight: 600 }}>ONVIF Device Found</div>
+                          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{cam.url}</div>
+                        </div>
+                        <button className="btn btn-primary" onClick={() => adoptCamera(cam)}>
+                          <Plus size={16} /> Adopt
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ borderTop: '1px solid var(--surface-border)', paddingTop: '2rem' }}>
+                <h3>Active Cameras</h3>
+                <p style={{ color: 'var(--text-muted)' }}>No cameras configured yet. Use Auto-Discover to find local IP cameras.</p>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'ai' && (
+            <div>
+              <h2>AI Pipeline Configuration</h2>
+              <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>Configure detection models and hardware acceleration.</p>
+              
+              <div style={{ display: 'grid', gap: '1.5rem' }}>
+                <div className="glass-panel" style={{ padding: '1.5rem', background: 'rgba(0,0,0,0.2)' }}>
+                  <h4>Object Detection Model</h4>
+                  <select className="input-field" style={{ marginTop: '0.5rem' }} defaultValue="yolov8n">
+                    <option value="yolov8n">YOLOv8 Nano (Fastest, CPU optimized)</option>
+                    <option value="yolov8s">YOLOv8 Small (Balanced)</option>
+                    <option value="yolo11n">YOLO11 Nano (Next-Gen)</option>
+                  </select>
+                </div>
+                
+                <div className="glass-panel" style={{ padding: '1.5rem', background: 'rgba(0,0,0,0.2)' }}>
+                  <h4>Hardware Accelerator</h4>
+                  <select className="input-field" style={{ marginTop: '0.5rem' }} defaultValue="auto">
+                    <option value="auto">Auto-Detect (Recommended)</option>
+                    <option value="cpu">CPU Only (ONNX Runtime)</option>
+                    <option value="cuda">NVIDIA GPU (CUDA/TensorRT)</option>
+                    <option value="openvino">Intel iGPU (OpenVINO)</option>
+                  </select>
+                </div>
+                
+                <button className="btn btn-primary" style={{ width: 'fit-content' }}>
+                  <Save size={18} /> Save AI Config
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-
-      {showDiscovery && <DiscoveryModal onClose={() => setShowDiscovery(false)} />}
     </div>
   );
 };
