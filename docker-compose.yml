@@ -20,7 +20,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - MQTT_BROKER=mqtt
     volumes:
-      - ./api:/app
+      - ./:/app
       - ./sentinel.yml:/app/sentinel.yml
     depends_on:
       - postgres
