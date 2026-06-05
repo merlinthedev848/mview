@@ -4,6 +4,7 @@ services:
   go2rtc:
     build:
       context: ./vendor/go2rtc
+      dockerfile: docker/Dockerfile
     container_name: sentinel-go2rtc
     network_mode: host       # Host network is best for RTSP/WebRTC discovery and performance
     volumes:
