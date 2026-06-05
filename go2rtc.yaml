@@ -1,0 +1,17 @@
+api:
+  listen: ":1984"
+
+webrtc:
+  listen: ":8555"
+  candidates:
+    - "stun:stun.l.google.com:19302"
+
+rtsp:
+  listen: ":8554"
+
+# This file will be automatically populated with streams from the PostgreSQL database 
+# when cameras are adopted via the mView Sentinel API.
+streams:
+  # Example dynamic stream (auto-generated when adopted)
+  # camera_1_main: rtsp://admin:password@192.168.1.101/stream1
+  # camera_1_sub: rtsp://admin:password@192.168.1.101/stream2
