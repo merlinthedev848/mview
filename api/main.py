@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
         log.warning(f"Frontend dist: NOT FOUND at {dist} — API-only mode")
 
     # Start recorders for all cameras
-    from api.database import AsyncSessionLocal
+    from api.database import async_session_maker as AsyncSessionLocal
     from api.models.camera import Camera
     from sqlalchemy.future import select
     async with AsyncSessionLocal() as db:
