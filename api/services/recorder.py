@@ -59,18 +59,56 @@ class CameraRecorder:
         # Output pattern: 2024-01-15_14-00-00.mp4
         output_pattern = str(output_dir / "%Y-%m-%d_%H-%M-%S.mp4")
 
+        # Probe the stream dynamically to detect valid audio
+        has_audio = False
+        try:
+            probe_cmd = [
+                "ffprobe",
+                "-v", "error",
+                "-rtsp_transport", "tcp",
+                "-show_entries", "stream=codec_type,codec_name",
+                "-of", "json",
+                self.rtsp_url
+            ]
+            probe_proc = await asyncio.create_subprocess_exec(
+                *probe_cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await asyncio.wait_for(probe_proc.communicate(), timeout=3.0)
+            if probe_proc.returncode == 0:
+                import json
+                data = json.loads(stdout.decode())
+                for stream in data.get("streams", []):
+                    if stream.get("codec_type") == "audio":
+                        codec = stream.get("codec_name")
+                        if codec and codec != "none":
+                            has_audio = True
+                            logger.info(f"[{self.camera_name}] Detected audio stream with codec: {codec}")
+        except Exception as e:
+            logger.warning(f"[{self.camera_name}] ffprobe stream analysis timed out or failed: {e}. Defaulting to video-only.")
+
         cmd = [
             "ffmpeg",
             "-loglevel", "warning",
-            "-analyzeduration", "10000000",    # 10s analysis duration to correctly identify codecs
-            "-probesize", "10000000",          # 10MB probe size
-            "-rtsp_transport", "tcp",          # Use TCP for reliability across all camera makes
+            "-analyzeduration", "10000000",
+            "-probesize", "10000000",
+            "-rtsp_transport", "tcp",
             "-i", self.rtsp_url,
-            "-map", "0:v",                     # Map the video stream
-            "-map", "0:a?",                    # Map the audio stream optionally (ignore if absent)
-            "-c:v", "copy",                    # Copy video stream — no transcoding, zero quality loss
-            "-c:a", "aac",                     # Encode audio to AAC (broadest compatibility)
-            "-b:a", "128k",
+            "-map", "0:v",                     # Always map the video stream
+            "-c:v", "copy",                    # Copy video stream — zero transcoding, zero quality loss
+        ]
+
+        if has_audio:
+            cmd.extend([
+                "-map", "0:a",                 # Map the audio stream
+                "-c:a", "aac",                 # Encode audio to AAC
+                "-b:a", "128k",
+            ])
+        else:
+            cmd.append("-an")                  # Disable audio if absent or invalid
+
+        cmd.extend([
             "-ignore_unknown",                 # Skip unknown stream types instead of crashing
             "-f", "segment",
             "-segment_time", str(SEGMENT_DURATION),
@@ -79,7 +117,7 @@ class CameraRecorder:
             "-strftime", "1",
             "-movflags", "+faststart",         # Web-optimised MP4 — can play before fully downloaded
             output_pattern,
-        ]
+        ])
 
         logger.info(f"[{self.camera_name}] Starting ffmpeg recording → {output_dir}")
 
