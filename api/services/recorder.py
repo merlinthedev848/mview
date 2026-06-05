@@ -111,13 +111,22 @@ class RecorderManager:
                 logger.info(f"Stopping recorder for removed camera {cid}")
                 self._recorders.pop(cid).stop()
 
-        # Start new cameras
+        # Start new or update changed cameras
         for cam in cameras:
-            if cam.enabled and cam.rtsp_url_main and cam.id not in self._recorders:
-                rec = CameraRecorder(cam.id, cam.name, cam.rtsp_url_main)
-                self._recorders[cam.id] = rec
-                rec.start()
-                logger.info(f"Started recorder for [{cam.name}] → {cam.rtsp_url_main}")
+            if cam.enabled and cam.rtsp_url_main:
+                if cam.id not in self._recorders:
+                    rec = CameraRecorder(cam.id, cam.name, cam.rtsp_url_main)
+                    self._recorders[cam.id] = rec
+                    rec.start()
+                    logger.info(f"Started recorder for [{cam.name}] → {cam.rtsp_url_main}")
+                else:
+                    existing = self._recorders[cam.id]
+                    if existing.rtsp_url != cam.rtsp_url_main or existing.camera_name != cam.name:
+                        logger.info(f"Updating recorder for [{cam.name}] due to configuration change...")
+                        existing.stop()
+                        rec = CameraRecorder(cam.id, cam.name, cam.rtsp_url_main)
+                        self._recorders[cam.id] = rec
+                        rec.start()
 
     def stop_all(self):
         for rec in self._recorders.values():
