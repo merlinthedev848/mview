@@ -31,7 +31,7 @@ const CameraFeed: React.FC<CameraFeedProps> = ({ cam }) => {
         await pc.setLocalDescription(offer);
         const res = await fetch(
           `http://${window.location.hostname}:1984/api/webrtc?src=${encodeURIComponent(cam.id)}`,
-          { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: offer.sdp }
+          { method: 'POST', body: offer.sdp }
         );
         if (res.ok) await pc.setRemoteDescription({ type: 'answer', sdp: await res.text() });
       } catch (e) { console.error('[WebRTC]', cam.name, e); }

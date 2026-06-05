@@ -39,7 +39,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
         const host = window.location.hostname;
         const response = await fetch(`http://${host}:1984/api/webrtc?src=${cameraId}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: offer.sdp
         });
 
