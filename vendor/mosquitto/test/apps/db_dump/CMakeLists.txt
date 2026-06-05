@@ -1,0 +1,15 @@
+set(EXCLUDE_LIST " ")
+set(PREFIX "apps-")
+file(GLOB PY_TEST_FILES db-dump-*.py)
+get_test_files(PY_TEST_FILES "${EXCLUDE_LIST}" PY_TEST_NAMES)
+
+add_python_test(PY_TEST_NAMES ${PREFIX} 0 "db-dump-client-stats.py")
+add_python_test(PY_TEST_NAMES ${PREFIX} 0 "db-dump-corrupt.py")
+add_python_test(PY_TEST_NAMES ${PREFIX} 0 "db-dump-json-v6-mqtt-v5-props.py")
+add_python_test(PY_TEST_NAMES ${PREFIX} 0 "db-dump-print-empty.py")
+add_python_test(PY_TEST_NAMES ${PREFIX} 0 "db-dump-print-v6-all.py")
+add_python_test(PY_TEST_NAMES ${PREFIX} 0 "db-dump-print-v6-mqtt-v5-props.py")
+add_python_test(PY_TEST_NAMES ${PREFIX} 0 "db-dump-stats.py")
+add_python_test(PY_TEST_NAMES ${PREFIX} 1 "db-dump-stats-current.py")
+
+check_for_missing_tests(PY_TEST_NAMES)

@@ -40,9 +40,8 @@ if [ -d "$INSTALL_DIR" ]; then
     echo "Directory $INSTALL_DIR already exists. Updating..."
     cd $INSTALL_DIR
     git pull
-    git submodule update --init --recursive
 else
-    git clone --recursive https://github.com/merlinthedev848/mview.git $INSTALL_DIR
+    git clone https://github.com/merlinthedev848/mview.git $INSTALL_DIR
     cd $INSTALL_DIR
 fi
 
