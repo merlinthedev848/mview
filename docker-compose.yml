@@ -1,34 +1,31 @@
-version: '3.8'
-
 services:
   go2rtc:
     build:
       context: ./vendor/go2rtc
       dockerfile: docker/Dockerfile
     container_name: sentinel-go2rtc
-    network_mode: host       # Host network is best for RTSP/WebRTC discovery and performance
+    network_mode: host
     volumes:
       - ./go2rtc.yaml:/config/go2rtc.yaml
     restart: unless-stopped
 
   api:
-    build: 
+    build:
       context: ./
       dockerfile: api/Dockerfile
     container_name: sentinel-api
-    ports:
-      - "8000:8000"
+    network_mode: host          # Host networking so ONVIF UDP multicast reaches LAN cameras
     environment:
-      - DATABASE_URL=postgresql+asyncpg://sentinel:sentinel@postgres:5432/sentinelnvr
-      - REDIS_URL=redis://redis:6379/0
-      - MQTT_BROKER=mqtt
+      - DATABASE_URL=postgresql+asyncpg://sentinel:sentinel@127.0.0.1:5432/sentinelnvr
+      - REDIS_URL=redis://127.0.0.1:6379/0
+      - MQTT_BROKER=127.0.0.1
+      - RECORDINGS_DIR=/mnt/storage/mview/recordings
+      - SEGMENT_MINUTES=60
     volumes:
-      - ./:/app
-      - ./sentinel.yml:/app/sentinel.yml
+      - /mnt/storage/mview/recordings:/mnt/storage/mview/recordings
     depends_on:
       - postgres
       - redis
-      - mqtt
     restart: unless-stopped
 
   postgres:

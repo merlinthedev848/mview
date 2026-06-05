@@ -1,91 +1,110 @@
-import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Video, PlaySquare, Settings as SettingsIcon, Map as MapIcon, Shield } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
+import { Video, PlaySquare, Bell, Settings as SettingsIcon, ShieldCheck, HardDrive, LogOut, Wifi } from 'lucide-react';
 
-import Dashboard from './pages/Dashboard';
-import LiveView from './pages/LiveView';
-import Playback from './pages/Playback';
-import Events from './pages/Events';
-import MapView from './pages/MapView';
-import Settings from './pages/Settings';
+import LiveView  from './pages/LiveView';
+import Playback  from './pages/Playback';
+import Events    from './pages/Events';
+import Settings  from './pages/Settings';
+
+const API = () => `http://${window.location.hostname}:8000`;
 
 const Sidebar = () => {
-  const location = useLocation();
-  
+  const [cameras, setCameras] = useState<any[]>([]);
+  const [events,  setEvents]  = useState<any[]>([]);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [c, e] = await Promise.all([
+          fetch(`${API()}/cameras`).then(r => r.ok ? r.json() : []),
+          fetch(`${API()}/events?limit=100`).then(r => r.ok ? r.json() : []),
+        ]);
+        setCameras(c);
+        setEvents(e);
+      } catch {}
+    };
+    load();
+    const t = setInterval(load, 10000);
+    return () => clearInterval(t);
+  }, []);
+
+  const onlineCams = cameras.filter(c => c.status !== 'offline').length;
+  const unreadEvents = events.length;
+
   const navItems = [
-    { path: '/', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
-    { path: '/live', label: 'Live View', icon: <Video size={20} /> },
-    { path: '/playback', label: 'Playback', icon: <PlaySquare size={20} /> },
-    { path: '/events', label: 'Events', icon: <Video size={20} /> },
-    { path: '/map', label: 'Map View', icon: <MapIcon size={20} /> },
-    { path: '/settings', label: 'Settings', icon: <SettingsIcon size={20} /> },
+    { to: '/',         label: 'Live View',  icon: <Video       size={16} />, end: true  },
+    { to: '/playback', label: 'Playback',   icon: <PlaySquare  size={16} />, end: false },
+    { to: '/events',   label: 'Events',     icon: <Bell        size={16} />, end: false, badge: unreadEvents || undefined },
+    { to: '/settings', label: 'Settings',   icon: <SettingsIcon size={16} />, end: false },
   ];
 
   return (
-    <div className="glass-panel" style={{ 
-      width: '260px', 
-      height: '100vh', 
-      position: 'fixed', 
-      left: 0, 
-      top: 0, 
-      display: 'flex', 
-      flexDirection: 'column',
-      borderRight: '1px solid var(--surface-border)',
-      borderTop: 'none',
-      borderBottom: 'none',
-      borderLeft: 'none',
-      borderRadius: 0,
-      zIndex: 100
-    }}>
-      <div style={{ padding: '2rem 1.5rem', display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div style={{ background: 'linear-gradient(135deg, var(--color-primary), var(--color-accent))', padding: '8px', borderRadius: '12px', display: 'flex' }}>
-          <Shield size={24} color="#fff" />
+    <div className="sidebar">
+      {/* Logo */}
+      <div className="sidebar-logo">
+        <div className="sidebar-logo-icon">
+          <ShieldCheck size={17} color="var(--cyan)" strokeWidth={2.5} />
         </div>
-        <h2 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, letterSpacing: '-0.5px' }} className="text-gradient">
-          mView Sentinel
-        </h2>
+        <div>
+          <div className="sidebar-logo-title">mView Sentinel</div>
+          <div className="sidebar-logo-sub">NVR Platform</div>
+        </div>
       </div>
 
-      <nav style={{ flex: 1, padding: '0 1rem', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {navItems.map((item) => {
-          const isActive = location.pathname === item.path;
-          return (
-            <Link 
-              key={item.path} 
-              to={item.path}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '12px 16px',
-                borderRadius: '12px',
-                textDecoration: 'none',
-                color: isActive ? '#fff' : 'var(--text-muted)',
-                background: isActive ? 'var(--surface-glass-hover)' : 'transparent',
-                borderLeft: isActive ? '3px solid var(--color-primary)' : '3px solid transparent',
-                transition: 'all 0.2s ease',
-                fontWeight: isActive ? 600 : 500
-              }}
-            >
-              <div style={{ color: isActive ? 'var(--color-primary)' : 'inherit' }}>
-                {item.icon}
-              </div>
-              {item.label}
-            </Link>
-          )
-        })}
-      </nav>
+      {/* Nav */}
+      <nav className="sidebar-nav">
+        <div className="nav-section">Navigation</div>
 
-      <div style={{ padding: '1.5rem', borderTop: '1px solid var(--surface-border)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--color-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-            CK
+        {navItems.map(item => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.end}
+            className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+          >
+            {item.icon}
+            {item.label}
+            {item.badge ? <span className="nav-badge">{item.badge > 99 ? '99+' : item.badge}</span> : null}
+          </NavLink>
+        ))}
+
+        <div className="nav-section">System</div>
+
+        <div style={{ padding: '6px 10px' }}>
+          {/* Camera summary */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <div className={`dot ${onlineCams > 0 ? 'online' : 'offline'}`} />
+              <span style={{ fontSize: '0.78rem', color: 'var(--t1)', fontWeight: 600 }}>Cameras</span>
+            </div>
+            <span style={{ fontSize: '0.7rem', color: 'var(--t2)' }}>{onlineCams}/{cameras.length}</span>
           </div>
-          <div>
-            <div style={{ fontSize: '0.9rem', fontWeight: 600 }}>Chris Kendall</div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Administrator</div>
+
+          {/* Network indicator */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <Wifi size={13} color="var(--t3)" />
+            <span style={{ fontSize: '0.74rem', color: 'var(--t2)' }}>Network</span>
+            <span style={{ marginLeft: 'auto', fontSize: '0.7rem', color: 'var(--green)' }}>OK</span>
           </div>
         </div>
+      </nav>
+
+      {/* Storage footer */}
+      <div className="sidebar-footer">
+        <div className="storage-label">
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <HardDrive size={12} /> Storage
+          </span>
+          <span>—</span>
+        </div>
+        <div className="storage-bar">
+          <div className="storage-bar-fill" style={{ width: '42%' }} />
+        </div>
+
+        <button className="nav-item" style={{ color: 'var(--t3)', marginTop: 6 }}>
+          <LogOut size={15} /> Logout
+        </button>
       </div>
     </div>
   );
@@ -94,19 +113,16 @@ const Sidebar = () => {
 function App() {
   return (
     <Router>
-      <div style={{ display: 'flex', minHeight: '100vh' }}>
+      <div className="app-shell">
         <Sidebar />
-        <main style={{ flex: 1, marginLeft: '260px', position: 'relative' }}>
+        <div className="main-content">
           <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/live" element={<LiveView />} />
-            <Route path="/playback" element={<Playback />} />
-            <Route path="/events" element={<Events />} />
-            <Route path="/map" element={<MapView />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="*" element={<div style={{padding: '3rem', textAlign: 'center', color: 'var(--text-muted)'}}><h1>404</h1><p>Component under construction</p></div>} />
+            <Route path="/"         element={<LiveView />}  />
+            <Route path="/playback" element={<Playback />}  />
+            <Route path="/events"   element={<Events />}    />
+            <Route path="/settings" element={<Settings />}  />
           </Routes>
-        </main>
+        </div>
       </div>
     </Router>
   );

@@ -1,0 +1,157 @@
+"""
+Recorder Service — FFmpeg-based 24/7 recording engine.
+
+For each enabled camera, spawns an ffmpeg process that:
+  - Reads the RTSP stream (video + audio)
+  - Segments recordings into 1-hour MP4 files under /recordings/{camera_id}/
+  - Auto-restarts on stream drop (with backoff)
+"""
+
+import asyncio
+import logging
+import os
+import re
+from datetime import datetime
+from pathlib import Path
+
+logger = logging.getLogger("mView-Recorder")
+
+RECORDINGS_BASE = Path(os.environ.get("RECORDINGS_DIR", "/mnt/storage/mview/recordings"))
+SEGMENT_DURATION = int(os.environ.get("SEGMENT_MINUTES", "60")) * 60  # seconds
+
+
+class CameraRecorder:
+    def __init__(self, camera_id: str, camera_name: str, rtsp_url: str):
+        self.camera_id = camera_id
+        self.camera_name = camera_name
+        self.rtsp_url = rtsp_url
+        self._task: asyncio.Task | None = None
+        self._stop = False
+
+    def start(self):
+        self._stop = False
+        self._task = asyncio.create_task(self._run_loop(), name=f"recorder-{self.camera_id}")
+
+    def stop(self):
+        self._stop = True
+        if self._task:
+            self._task.cancel()
+
+    async def _run_loop(self):
+        backoff = 5
+        while not self._stop:
+            try:
+                await self._record_once()
+                backoff = 5  # reset on clean exit
+            except asyncio.CancelledError:
+                logger.info(f"[{self.camera_name}] Recorder cancelled.")
+                return
+            except Exception as e:
+                logger.warning(f"[{self.camera_name}] Recorder error: {e}. Retrying in {backoff}s…")
+            if not self._stop:
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 120)
+
+    async def _record_once(self):
+        output_dir = RECORDINGS_BASE / self.camera_id
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Output pattern: 2024-01-15_14-00-00.mp4
+        output_pattern = str(output_dir / "%Y-%m-%d_%H-%M-%S.mp4")
+
+        cmd = [
+            "ffmpeg",
+            "-loglevel", "warning",
+            "-rtsp_transport", "tcp",          # Use TCP for reliability across all camera makes
+            "-i", self.rtsp_url,
+            "-c:v", "copy",                    # Copy video stream — no transcoding, zero quality loss
+            "-c:a", "aac",                     # Encode audio to AAC (broadest compatibility)
+            "-b:a", "128k",
+            "-f", "segment",
+            "-segment_time", str(SEGMENT_DURATION),
+            "-segment_format", "mp4",
+            "-reset_timestamps", "1",
+            "-strftime", "1",
+            "-movflags", "+faststart",         # Web-optimised MP4 — can play before fully downloaded
+            output_pattern,
+        ]
+
+        logger.info(f"[{self.camera_name}] Starting ffmpeg recording → {output_dir}")
+
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        _, stderr = await proc.communicate()
+
+        if proc.returncode not in (0, 255):  # 255 = SIGTERM (normal stop)
+            err = stderr.decode(errors="replace") if stderr else "unknown"
+            raise RuntimeError(f"ffmpeg exited {proc.returncode}: {err[-300:]}")
+
+        logger.info(f"[{self.camera_name}] ffmpeg segment completed normally.")
+
+
+class RecorderManager:
+    def __init__(self):
+        self._recorders: dict[str, CameraRecorder] = {}
+
+    async def sync_cameras(self, cameras: list):
+        """
+        Called at startup and whenever cameras change.
+        Starts recording for every enabled camera with an RTSP URL,
+        stops recording for cameras that have been removed.
+        """
+        current_ids = {cam.id for cam in cameras if cam.enabled and cam.rtsp_url_main}
+
+        # Stop removed cameras
+        for cid in list(self._recorders.keys()):
+            if cid not in current_ids:
+                logger.info(f"Stopping recorder for removed camera {cid}")
+                self._recorders.pop(cid).stop()
+
+        # Start new cameras
+        for cam in cameras:
+            if cam.enabled and cam.rtsp_url_main and cam.id not in self._recorders:
+                rec = CameraRecorder(cam.id, cam.name, cam.rtsp_url_main)
+                self._recorders[cam.id] = rec
+                rec.start()
+                logger.info(f"Started recorder for [{cam.name}] → {cam.rtsp_url_main}")
+
+    def stop_all(self):
+        for rec in self._recorders.values():
+            rec.stop()
+        self._recorders.clear()
+
+    def status(self) -> dict:
+        return {cid: "recording" for cid in self._recorders}
+
+
+recorder_manager = RecorderManager()
+
+
+def list_recordings(camera_id: str | None = None) -> list[dict]:
+    """Return a list of recording files, optionally filtered by camera."""
+    results = []
+    base = RECORDINGS_BASE
+    if not base.exists():
+        return results
+
+    cam_dirs = [base / camera_id] if camera_id else [d for d in base.iterdir() if d.is_dir()]
+
+    for cam_dir in cam_dirs:
+        if not cam_dir.exists():
+            continue
+        for f in sorted(cam_dir.glob("*.mp4"), reverse=True):
+            stat = f.stat()
+            results.append({
+                "camera_id": cam_dir.name,
+                "filename": f.name,
+                "path": str(f),
+                "size_mb": round(stat.st_size / 1_048_576, 1),
+                "created_at": datetime.fromtimestamp(stat.st_ctime).isoformat(),
+                "url": f"/recordings/{cam_dir.name}/{f.name}",
+            })
+
+    return results

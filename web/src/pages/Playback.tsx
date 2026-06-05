@@ -1,171 +1,139 @@
-import React, { useState } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Maximize, Calendar, FastForward, Bookmark, Download } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { PlayCircle, ChevronLeft, ChevronRight, Download, Maximize2, Volume2 } from 'lucide-react';
 
-export const Playback = () => {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [speed, setSpeed] = useState('1x');
+const API = () => `http://${window.location.hostname}:8000`;
 
-  // Simulated timeline markers
-  const timelineMarkers = [
-    { left: '10%', width: '5%', color: 'var(--color-primary)', label: 'Motion' },
-    { left: '25%', width: '2%', color: 'var(--color-danger)', label: 'Person' },
-    { left: '45%', width: '15%', color: 'var(--color-primary)', label: 'Motion' },
-    { left: '65%', width: '3%', color: 'var(--color-warning)', label: 'Vehicle' },
-    { left: '85%', width: '10%', color: 'var(--color-primary)', label: 'Motion' }
-  ];
+const Playback: React.FC = () => {
+  const [recordings, setRecordings] = useState<any[]>([]);
+  const [cameras, setCameras] = useState<any[]>([]);
+  const [selected, setSelected] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [filterCam, setFilterCam] = useState<string>('all');
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [recRes, camRes] = await Promise.all([
+          fetch(`${API()}/recordings-list/`),
+          fetch(`${API()}/cameras`),
+        ]);
+        if (recRes.ok) setRecordings(await recRes.json());
+        if (camRes.ok) setCameras(await camRes.json());
+      } catch {}
+      setLoading(false);
+    };
+    load();
+    const t = setInterval(load, 30000);
+    return () => clearInterval(t);
+  }, []);
+
+  const filtered = filterCam === 'all'
+    ? recordings
+    : recordings.filter(r => r.camera_id === filterCam);
+
+  const getCamName = (id: string) => cameras.find(c => c.id === id)?.name ?? id;
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto', height: 'calc(100vh - 4rem)', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 className="text-gradient" style={{ fontSize: '2rem', margin: 0 }}>Smart Playback</h1>
-          <p style={{ color: 'var(--text-muted)', margin: 0 }}>Review recorded footage with AI event markers</p>
-        </div>
-        
-        <div style={{ display: 'flex', gap: '1rem' }}>
-          <select className="input-field" style={{ width: '200px' }} defaultValue="cam1">
-            <option value="cam1">Front Door (4K)</option>
-            <option value="cam2">Driveway</option>
-            <option value="cam3">Back Garden</option>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      {/* Top bar */}
+      <div className="topbar" style={{ justifyContent: 'space-between' }}>
+        <h1 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--t1)' }}>Smart Playback</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: '0.76rem', color: 'var(--t2)' }}>Filter:</span>
+          <select
+            className="form-select"
+            style={{ width: 180, padding: '5px 10px', fontSize: '0.78rem' }}
+            value={filterCam}
+            onChange={e => setFilterCam(e.target.value)}
+          >
+            <option value="all">All Cameras</option>
+            {cameras.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
-          <button className="btn btn-outline" style={{ background: 'var(--surface-glass)' }}>
-            <Calendar size={18} /> Today, Jun 5
-          </button>
         </div>
-      </header>
+      </div>
 
-      {/* Main Video Player Area */}
-      <div className="glass-panel" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ 
-          flex: 1, 
-          background: '#000', 
-          position: 'relative',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundImage: 'linear-gradient(45deg, #050505 25%, #0a0a0f 25%, #0a0a0f 50%, #050505 50%, #050505 75%, #0a0a0f 75%, #0a0a0f 100%)',
-          backgroundSize: '40px 40px'
-        }}>
-          {/* Simulated Video Placeholder */}
-          <div style={{ color: 'var(--surface-border-highlight)', textAlign: 'center' }}>
-            <Play size={48} opacity={0.5} style={{ margin: '0 auto', marginBottom: '1rem' }}/>
-            <div style={{ fontFamily: 'monospace', fontSize: '1.2rem', letterSpacing: '2px' }}>14:32:45 REC</div>
+      <div className="playback-layout">
+        {/* Recording list */}
+        <div className="playback-sidebar">
+          <div style={{ padding: '10px 12px 6px', borderBottom: '1px solid var(--border)' }}>
+            <span className="card-title">Recordings</span>
+            <span style={{ marginLeft: 8, fontSize: '0.7rem', color: 'var(--t3)' }}>
+              {filtered.length} file{filtered.length !== 1 ? 's' : ''}
+            </span>
           </div>
-
-          {/* OSD (On Screen Display) */}
-          <div style={{ position: 'absolute', top: '20px', left: '20px', display: 'flex', gap: '10px' }}>
-            <span className="status-indicator recording" style={{ alignSelf: 'center' }}></span>
-            <span style={{ color: '#fff', textShadow: '0 2px 4px rgba(0,0,0,0.8)', fontWeight: 600 }}>Front Door</span>
-          </div>
-          
-          <div style={{ position: 'absolute', top: '20px', right: '20px' }}>
-            <button className="btn" style={{ background: 'rgba(0,0,0,0.5)', color: '#fff', padding: '8px' }}>
-              <Maximize size={18} />
-            </button>
+          <div className="playback-list">
+            {loading ? (
+              <div className="empty"><div className="spinner" /></div>
+            ) : filtered.length === 0 ? (
+              <div className="empty">
+                <div className="empty-title">No Recordings Yet</div>
+                <div className="empty-sub">
+                  Recordings appear here once cameras are added and recording begins.
+                </div>
+              </div>
+            ) : (
+              filtered.map((rec, i) => (
+                <div
+                  key={i}
+                  className={`playback-item${selected?.url === rec.url ? ' active' : ''}`}
+                  onClick={() => setSelected(rec)}
+                >
+                  <div className="playback-item-name">{getCamName(rec.camera_id)}</div>
+                  <div className="playback-item-meta">
+                    {new Date(rec.created_at).toLocaleString('en-GB', {
+                      day: '2-digit', month: 'short',
+                      hour: '2-digit', minute: '2-digit',
+                    })} · {rec.size_mb} MB
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
-        {/* Playback Controls & Timeline */}
-        <div style={{ padding: '1.5rem', background: 'rgba(0,0,0,0.4)', borderTop: '1px solid var(--surface-border)' }}>
-          {/* Timeline Bar */}
-          <div style={{ marginBottom: '1.5rem', position: 'relative' }}>
-            {/* Time labels */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '8px', fontFamily: 'monospace' }}>
-              <span>00:00</span>
-              <span>06:00</span>
-              <span>12:00</span>
-              <span>18:00</span>
-              <span>24:00</span>
-            </div>
-            
-            {/* The Bar */}
-            <div style={{ 
-              height: '40px', 
-              background: 'rgba(255,255,255,0.05)', 
-              borderRadius: '6px', 
-              position: 'relative',
-              overflow: 'hidden',
-              cursor: 'pointer',
-              border: '1px solid var(--surface-border)'
-            }}>
-              {/* Continuous Recording Background */}
-              <div style={{ position: 'absolute', top: '25%', height: '50%', left: '0', right: '0', background: 'rgba(255,255,255,0.1)' }}></div>
-              
-              {/* Event Markers */}
-              {timelineMarkers.map((marker, i) => (
-                <div key={i} style={{
-                  position: 'absolute',
-                  top: '10%',
-                  height: '80%',
-                  left: marker.left,
-                  width: marker.width,
-                  background: marker.color,
-                  borderRadius: '4px',
-                  boxShadow: `0 0 10px ${marker.color}`
-                }}></div>
-              ))}
-              
-              {/* Playhead */}
-              <div style={{
-                position: 'absolute',
-                top: 0,
-                bottom: 0,
-                left: '60%',
-                width: '2px',
-                background: '#fff',
-                boxShadow: '0 0 10px rgba(255,255,255,0.8)',
-                zIndex: 10
-              }}>
-                <div style={{ position: 'absolute', top: '-6px', left: '-5px', width: '12px', height: '12px', background: '#fff', borderRadius: '50%' }}></div>
+        {/* Video player */}
+        <div className="playback-player">
+          <div className="playback-video-wrap">
+            {selected ? (
+              <video
+                ref={videoRef}
+                src={`${API()}${selected.url}`}
+                controls
+                autoPlay
+                style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 4 }}
+              />
+            ) : (
+              <div className="empty" style={{ flex: 1 }}>
+                <PlayCircle size={48} strokeWidth={1} color="var(--t3)" />
+                <div className="empty-title">Select a recording</div>
+                <div className="empty-sub">
+                  Choose a file from the list on the left to begin playback.
+                </div>
+              </div>
+            )}
+          </div>
+
+          {selected && (
+            <div className="playback-controls-bar">
+              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--t1)' }}>
+                {getCamName(selected.camera_id)}
+              </span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--t2)', marginLeft: 6 }}>
+                {new Date(selected.created_at).toLocaleString('en-GB')} · {selected.size_mb} MB
+              </span>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                <a
+                  href={`${API()}${selected.url}`}
+                  download={selected.filename}
+                  className="btn btn-ghost"
+                  style={{ padding: '5px 12px', fontSize: '0.78rem' }}
+                >
+                  <Download size={13} /> Download
+                </a>
               </div>
             </div>
-          </div>
-
-          {/* Transport Controls */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <button className="btn btn-outline" style={{ padding: '8px 12px' }}><Bookmark size={18} /></button>
-              <button className="btn btn-outline" style={{ padding: '8px 12px' }}><Download size={18} /></button>
-            </div>
-            
-            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-              <button className="btn btn-outline" style={{ border: 'none', background: 'transparent' }}>
-                <SkipBack size={24} />
-              </button>
-              
-              <button 
-                className="btn btn-primary" 
-                style={{ padding: '12px', borderRadius: '50%' }}
-                onClick={() => setIsPlaying(!isPlaying)}
-              >
-                {isPlaying ? <Pause size={24} /> : <Play size={24} fill="currentColor" />}
-              </button>
-              
-              <button className="btn btn-outline" style={{ border: 'none', background: 'transparent' }}>
-                <SkipForward size={24} />
-              </button>
-            </div>
-            
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', background: 'var(--surface-glass)', padding: '4px', borderRadius: '8px' }}>
-              <FastForward size={16} color="var(--text-muted)" style={{ margin: '0 8px' }} />
-              {['0.5x', '1x', '2x', '4x', '8x'].map(s => (
-                <button 
-                  key={s}
-                  onClick={() => setSpeed(s)}
-                  style={{ 
-                    background: speed === s ? 'var(--color-primary)' : 'transparent',
-                    color: speed === s ? '#000' : 'var(--text-muted)',
-                    border: 'none',
-                    padding: '4px 8px',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontWeight: 600,
-                    fontSize: '0.8rem'
-                  }}
-                >{s}</button>
-              ))}
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

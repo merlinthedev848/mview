@@ -1,73 +1,99 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-import os
+from fastapi.responses import FileResponse, StreamingResponse
 from contextlib import asynccontextmanager
+import os
+import aiofiles
+from pathlib import Path
 
 from api.database import engine, Base
-from api.routers import cameras
-from api.services.onvif_service import onvif_service
+from api.routers import cameras, recordings
+from api.services.recorder import recorder_manager
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup logic
-    print("Starting mView Sentinel API...")
-    
-    # Create database tables (in dev we use sqlite + auto-create, in prod alembic migrations)
+    print("Starting mView Sentinel API…")
+
+    # Create DB tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        
+
+    # Start recording for all cameras
+    from api.database import AsyncSessionLocal
+    from api.models.camera import Camera
+    from sqlalchemy.future import select
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(Camera))
+        cams = result.scalars().all()
+    await recorder_manager.sync_cameras(cams)
+
     yield
-    
-    # Shutdown logic
-    print("Shutting down mView Sentinel API...")
+
+    print("Shutting down mView Sentinel API…")
+    recorder_manager.stop_all()
     await engine.dispose()
 
 
 app = FastAPI(
     title="mView Sentinel API",
-    description="Core backend for the Ultimate Open-Source Linux NVR",
+    description="Core backend for mView Sentinel NVR",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
-# Allow the React frontend to communicate with the API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # For development. Bind to actual UI domains in production.
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include Routers
+# Routers
 app.include_router(cameras.router)
+app.include_router(recordings.router)
+
 
 @app.get("/system/health")
-async def health_check():
+async def health():
     return {
         "status": "healthy",
         "version": "1.0.0",
-        "components": {
-            "database": "connected",
-            "redis": "stub",
-            "mqtt": "stub"
-        }
+        "recording": recorder_manager.status(),
     }
 
-# Mount the compiled React Frontend (Static Assets)
-# We serve it on the root URL path
-frontend_path = os.path.join(os.path.dirname(__file__), "..", "web", "dist")
 
-if os.path.exists(frontend_path):
-    # Serve static files (assets, js, css)
-    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_path, "assets")), name="assets")
-    
-    # Catch-all to serve index.html for React Router compatibility
+# ── Serve recorded video files with range request support ───────────────────
+RECORDINGS_DIR = Path(os.environ.get("RECORDINGS_DIR", "/mnt/storage/mview/recordings"))
+
+
+@app.get("/recordings/{camera_id}/{filename}")
+async def serve_recording(camera_id: str, filename: str, request_range: str = None):
+    """Serve an MP4 recording with HTTP range support for smooth browser playback."""
+    file_path = RECORDINGS_DIR / camera_id / filename
+    if not file_path.exists() or not file_path.is_file():
+        from fastapi import HTTPException
+        raise HTTPException(404, "Recording not found")
+    return FileResponse(
+        str(file_path),
+        media_type="video/mp4",
+        headers={"Accept-Ranges": "bytes"},
+    )
+
+
+# ── Serve React frontend ────────────────────────────────────────────────────
+frontend_path = Path(os.path.dirname(__file__)).parent / "web" / "dist"
+
+if frontend_path.exists():
+    assets_path = frontend_path / "assets"
+    if assets_path.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_path)), name="assets")
+
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
-        path = os.path.join(frontend_path, full_path)
-        if os.path.exists(path) and os.path.isfile(path):
-            return FileResponse(path)
-        return FileResponse(os.path.join(frontend_path, "index.html"))
+        file = frontend_path / full_path
+        if file.exists() and file.is_file():
+            return FileResponse(str(file))
+        return FileResponse(str(frontend_path / "index.html"))
