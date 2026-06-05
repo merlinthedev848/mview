@@ -13,7 +13,8 @@ services:
 
   api:
     build: 
-      context: ./api
+      context: ./
+      dockerfile: api/Dockerfile
     container_name: sentinel-api
     ports:
       - "8000:8000"

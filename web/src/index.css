@@ -1,30 +1,30 @@
 :root {
-  /* Bright Dark Mode Color Palette - "Tesla / Vercel" aesthetic */
-  --bg-dark-base: #0a0a0f;
-  --bg-dark-gradient: linear-gradient(135deg, #0a0a0f 0%, #151520 100%);
+  /* Premium Dark Mode Color Palette based on mockups */
+  --bg-dark-base: #0f121b;
+  --bg-dark-gradient: radial-gradient(circle at 10% 20%, #151925 0%, #0a0b10 90%);
   
-  --color-primary: #00d4ff; /* Electric Cyan */
-  --color-primary-glow: rgba(0, 212, 255, 0.4);
+  --color-primary: #00f0ff; /* Neon Cyan */
+  --color-primary-glow: rgba(0, 240, 255, 0.5);
   
-  --color-accent: #7c3aed; /* Vivid Violet */
-  --color-accent-glow: rgba(124, 58, 237, 0.4);
+  --color-accent: #b026ff; /* Neon Purple */
+  --color-accent-glow: rgba(176, 38, 255, 0.5);
   
-  --color-success: #10b981; /* Emerald */
-  --color-warning: #f59e0b; /* Amber */
-  --color-danger: #f43f5e;  /* Rose */
+  --color-success: #00ffa3; /* Neon Green */
+  --color-warning: #ffb800; /* Neon Yellow */
+  --color-danger: #ff2a5f;  /* Neon Red */
   
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
+  --text-main: #ffffff;
+  --text-muted: #8e9bb0;
   
   /* Glassmorphism Tokens */
-  --surface-glass: rgba(255, 255, 255, 0.03);
-  --surface-glass-hover: rgba(255, 255, 255, 0.06);
-  --surface-border: rgba(255, 255, 255, 0.08);
-  --surface-border-highlight: rgba(0, 212, 255, 0.3);
+  --surface-glass: rgba(20, 24, 36, 0.6);
+  --surface-glass-hover: rgba(30, 35, 50, 0.8);
+  --surface-border: rgba(255, 255, 255, 0.05);
+  --surface-border-highlight: rgba(0, 240, 255, 0.4);
   
   /* Shadows */
-  --shadow-glow: 0 0 20px var(--color-primary-glow);
-  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 0 15px var(--color-primary-glow);
+  --shadow-card: 0 10px 40px rgba(0, 0, 0, 0.5);
 }
 
 * {
@@ -49,22 +49,25 @@ body {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   font-weight: 800;
+  text-shadow: 0 0 20px rgba(0, 240, 255, 0.2);
 }
 
 .stat-value {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 2.5rem;
+  font-size: 2.2rem;
   font-weight: 700;
   letter-spacing: -1px;
+  color: #fff;
+  text-shadow: 0 0 10px rgba(255,255,255,0.2);
 }
 
 /* Glassmorphism Panel Component */
 .glass-panel {
   background: var(--surface-glass);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--surface-border);
-  border-radius: 16px;
+  border-radius: 12px;
   box-shadow: var(--shadow-card);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -72,7 +75,26 @@ body {
 .glass-panel:hover {
   background: var(--surface-glass-hover);
   border-color: var(--surface-border-highlight);
-  transform: translateY(-2px);
+  box-shadow: var(--shadow-glow);
+}
+
+/* Custom glowing borders for active components */
+.glow-border {
+  position: relative;
+}
+.glow-border::before {
+  content: "";
+  position: absolute;
+  top: -2px; left: -2px; right: -2px; bottom: -2px;
+  background: linear-gradient(45deg, var(--color-primary), var(--color-accent));
+  z-index: -1;
+  border-radius: 14px;
+  opacity: 0.5;
+  filter: blur(8px);
+  transition: opacity 0.3s ease;
+}
+.glow-border:hover::before {
+  opacity: 1;
 }
 
 /* Buttons */
@@ -90,14 +112,15 @@ body {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
-  color: #fff;
-  box-shadow: 0 4px 15px var(--color-accent-glow);
+  background: linear-gradient(135deg, var(--color-primary) 0%, #0099ff 100%);
+  color: #000;
+  font-weight: 700;
+  box-shadow: 0 4px 15px var(--color-primary-glow);
 }
 
 .btn-primary:hover {
-  box-shadow: 0 6px 20px var(--color-primary-glow);
-  transform: translateY(-1px);
+  box-shadow: 0 6px 20px var(--color-primary-glow), 0 0 10px var(--color-primary);
+  transform: translateY(-2px);
 }
 
 .btn-outline {
@@ -108,14 +131,15 @@ body {
 
 .btn-outline:hover {
   border-color: var(--color-primary);
-  background: rgba(0, 212, 255, 0.05);
+  background: rgba(0, 240, 255, 0.05);
+  box-shadow: 0 0 15px var(--color-primary-glow);
 }
 
 /* Form Controls */
 .input-field {
   width: 100%;
   padding: 12px 16px;
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.4);
   border: 1px solid var(--surface-border);
   border-radius: 8px;
   color: var(--text-main);
@@ -126,7 +150,7 @@ body {
 
 .input-field:focus {
   border-color: var(--color-primary);
-  box-shadow: inset 0 0 0 1px var(--color-primary), 0 0 10px var(--color-primary-glow);
+  box-shadow: inset 0 0 0 1px var(--color-primary), 0 0 15px var(--color-primary-glow);
 }
 
 /* Status Indicators */
@@ -141,12 +165,12 @@ body {
 .status-indicator.recording {
   background-color: var(--color-danger);
   color: var(--color-danger);
-  animation: pulse-danger 2s infinite;
+  animation: pulse-danger 1.5s infinite;
 }
 
 .status-indicator.online {
-  background-color: var(--color-primary);
-  color: var(--color-primary);
+  background-color: var(--color-success);
+  color: var(--color-success);
 }
 
 .status-indicator.offline {
@@ -155,9 +179,15 @@ body {
 }
 
 @keyframes pulse-danger {
-  0% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.7); }
-  70% { box-shadow: 0 0 0 10px rgba(244, 63, 94, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(255, 42, 95, 0.7); }
+  70% { box-shadow: 0 0 0 10px rgba(255, 42, 95, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 42, 95, 0); }
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 42, 95, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(255, 42, 95, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 42, 95, 0); }
 }
 
 /* Scrollbar customization */
@@ -166,7 +196,7 @@ body {
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(0,0,0,0.2);
+  background: rgba(0,0,0,0.3);
 }
 ::-webkit-scrollbar-thumb {
   background: var(--surface-border);
@@ -174,4 +204,5 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-primary);
+  box-shadow: 0 0 10px var(--color-primary-glow);
 }

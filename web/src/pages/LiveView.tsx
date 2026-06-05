@@ -1,19 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Grid, Grid3x3, LayoutGrid, Maximize, Settings2 } from 'lucide-react';
 import VideoPlayer from '../components/VideoPlayer';
 
-// Mock cameras mapped from our backend
-const liveCameras = [
-  { id: '1', name: 'Front Door', status: 'recording' as const, hasMotion: false },
-  { id: '2', name: 'Driveway', status: 'recording' as const, hasMotion: true },
-  { id: '3', name: 'Back Garden', status: 'online' as const, hasMotion: false },
-  { id: '4', name: 'Side Gate', status: 'offline' as const, hasMotion: false },
-  { id: '5', name: 'Garage Indoor', status: 'online' as const, hasMotion: false },
-  { id: '6', name: 'Patio', status: 'recording' as const, hasMotion: false },
-];
-
 const LiveView = () => {
   const [gridLayout, setGridLayout] = useState(2); // 1, 2 (2x2), 3 (3x3)
+  const [liveCameras, setLiveCameras] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchCameras = async () => {
+      try {
+        const host = window.location.hostname;
+        const res = await fetch(`http://${host}:8000/cameras`);
+        if (res.ok) {
+          const data = await res.json();
+          setLiveCameras(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch cameras:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCameras();
+    const interval = setInterval(fetchCameras, 5000);
+    return () => clearInterval(interval);
+  }, []);
   
   return (
     <div style={{ padding: '2rem', height: '100vh', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -77,16 +90,26 @@ const LiveView = () => {
         gap: '1rem',
         minHeight: 0 // Crucial for grid to flex properly
       }}>
-        {liveCameras.slice(0, gridLayout * gridLayout).map(cam => (
-          <div key={cam.id} style={{ height: '100%' }}>
-            <VideoPlayer 
-              cameraId={cam.id}
-              name={cam.name}
-              status={cam.status}
-              hasMotion={cam.hasMotion}
-            />
+        {loading && liveCameras.length === 0 ? (
+          <div style={{ color: 'var(--text-muted)', textAlign: 'center', gridColumn: `span ${gridLayout}`, paddingTop: '5rem' }}>
+            Loading cameras...
           </div>
-        ))}
+        ) : liveCameras.length === 0 ? (
+          <div style={{ color: 'var(--text-muted)', textAlign: 'center', gridColumn: `span ${gridLayout}`, paddingTop: '5rem' }}>
+            No cameras configured. Go to Settings to auto-discover ONVIF devices.
+          </div>
+        ) : (
+          liveCameras.slice(0, gridLayout * gridLayout).map((cam: any) => (
+            <div key={cam.id} style={{ height: '100%' }}>
+              <VideoPlayer 
+                cameraId={cam.id}
+                name={cam.name}
+                status={cam.status}
+                hasMotion={false}
+              />
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

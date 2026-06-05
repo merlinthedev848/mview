@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Camera, Maximize, Mic, Video as VideoIcon, Activity, Focus } from 'lucide-react';
 
 interface VideoPlayerProps {
@@ -10,11 +10,55 @@ interface VideoPlayerProps {
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMotion = false }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isStreaming, setIsStreaming] = useState(false);
 
-  // In a real implementation, this component would:
-  // 1. Establish a WebRTC connection to go2rtc
-  // 2. Render a <video> element with the incoming stream
-  // 3. Handle connection drops and ICE negotiation
+  useEffect(() => {
+    if (status === 'offline') return;
+
+    let pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    });
+
+    pc.addTransceiver('video', { direction: 'recvonly' });
+    pc.addTransceiver('audio', { direction: 'recvonly' });
+
+    pc.ontrack = (event) => {
+      if (videoRef.current && videoRef.current.srcObject !== event.streams[0]) {
+        videoRef.current.srcObject = event.streams[0];
+        setIsStreaming(true);
+      }
+    };
+
+    const startStream = async () => {
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        // Fetch answer from go2rtc API running on port 1984
+        const host = window.location.hostname;
+        const response = await fetch(`http://${host}:1984/api/webrtc?src=${cameraId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: offer.sdp
+        });
+
+        if (response.ok) {
+          const answerSdp = await response.text();
+          await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+        }
+      } catch (err) {
+        console.error("WebRTC Error for camera", cameraId, err);
+      }
+    };
+
+    startStream();
+
+    return () => {
+      setIsStreaming(false);
+      pc.close();
+    };
+  }, [cameraId, status]);
 
   return (
     <div 
@@ -24,7 +68,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
         width: '100%',
         height: '100%',
         minHeight: '250px',
-        background: '#000',
+        background: 'var(--bg-dark-base)',
         borderRadius: '12px',
         overflow: 'hidden',
         border: hasMotion ? '2px solid var(--color-danger)' : '1px solid var(--surface-border)',
@@ -34,17 +78,27 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Simulated Video Feed Area */}
-      <div style={{
-        position: 'absolute',
-        top: 0, left: 0, right: 0, bottom: 0,
-        background: 'linear-gradient(45deg, #050508 0%, #1a1a24 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-      }}>
-        <VideoIcon size={48} color="rgba(255,255,255,0.05)" />
-      </div>
+      {/* Video Element */}
+      {status !== 'offline' ? (
+        <video 
+          ref={videoRef}
+          autoPlay 
+          playsInline 
+          muted 
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+        />
+      ) : (
+        <div style={{
+          position: 'absolute',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'linear-gradient(45deg, #050508 0%, #1a1a24 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <VideoIcon size={48} color="rgba(255,255,255,0.05)" />
+        </div>
+      )}
 
       {/* Top Gradient Overlay */}
       <div style={{
@@ -113,9 +167,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
       </div>
       
       {/* WebRTC performance overlay stub */}
-      {isHovered && (
+      {isHovered && isStreaming && (
         <div style={{ position: 'absolute', top: '40px', left: '12px', zIndex: 10, color: 'rgba(255,255,255,0.5)', fontSize: '0.7rem', fontFamily: 'var(--font-mono)' }}>
-          WebRTC | 4K | 30fps | 1.2Mbps
+          WebRTC | Connected
         </div>
       )}
     </div>

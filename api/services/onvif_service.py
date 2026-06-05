@@ -37,12 +37,27 @@ class ONVIFService:
                 if any('networkvideotransmitter' in t or 'device' in t for t in types):
                     xaddrs = service.getXAddrs()
                     if xaddrs:
-                        # Grab the first address
                         url = xaddrs[0]
+                        import urllib.parse
+                        parsed_url = urllib.parse.urlparse(url)
+                        ip_address = parsed_url.hostname or "unknown"
+
+                        manufacturer = "Unknown"
+                        model = "Unknown"
+                        for scope in service.getScopes():
+                            scope_str = str(scope)
+                            if "onvif://www.onvif.org/name/" in scope_str:
+                                manufacturer = urllib.parse.unquote(scope_str.split("/")[-1])
+                            elif "onvif://www.onvif.org/hardware/" in scope_str:
+                                model = urllib.parse.unquote(scope_str.split("/")[-1])
+                        
                         discovered.append({
-                            "uuid": service.getEPR(),
-                            "url": url,
-                            "scopes": service.getScopes()
+                            "id": str(service.getEPR()).replace("urn:uuid:", ""),
+                            "ip": ip_address,
+                            "manufacturer": manufacturer,
+                            "model": model,
+                            "onvif_endpoint": url,
+                            "status": "online"
                         })
             except Exception as e:
                 logger.error(f"Error parsing WS-Discovery service: {e}")

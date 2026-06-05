@@ -1,13 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Camera, Shield, Activity, HardDrive, AlertTriangle, Play } from 'lucide-react';
+import VideoPlayer from '../components/VideoPlayer';
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
 
-// Keeping mock chart data as a placeholder until time-series DB is wired
-const mockChartData = [
-  { time: '00:00', events: 12 }, { time: '04:00', events: 5 }, { time: '08:00', events: 45 },
-  { time: '12:00', events: 32 }, { time: '16:00', events: 68 }, { time: '20:00', events: 24 },
-  { time: '24:00', events: 18 }
-];
 
 export const Dashboard = () => {
   const [cameras, setCameras] = useState([]);
@@ -103,29 +98,20 @@ export const Dashboard = () => {
           <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
             <Play size={20} color="var(--color-primary)" /> Live Camera Grid
           </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '1.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '1.5rem', minHeight: 0 }}>
             {cameras.length === 0 ? (
               <div style={{ color: 'var(--text-muted)', padding: '2rem', textAlign: 'center', gridColumn: 'span 2' }}>
                 No cameras found in database. Go to Settings to adopt ONVIF cameras.
               </div>
             ) : (
               cameras.map((cam: any) => (
-                <div key={cam.id} style={{ 
-                  position: 'relative', 
-                  height: '200px', 
-                  background: '#000', 
-                  borderRadius: '8px',
-                  overflow: 'hidden',
-                  border: '1px solid var(--surface-border)'
-                }}>
-                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0) 50%, rgba(0,0,0,0.8) 100%)', zIndex: 1 }}></div>
-                  <div style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 2, display: 'flex', gap: '8px' }}>
-                    <div className={`status-indicator ${cam.status || 'offline'}`}></div>
-                  </div>
-                  <div style={{ position: 'absolute', bottom: '10px', left: '10px', zIndex: 2 }}>
-                    <h4 style={{ color: '#fff', margin: 0, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>{cam.name}</h4>
-                    <p style={{ color: 'var(--color-primary)', fontSize: '0.8rem', margin: 0 }}>{cam.rtsp_url}</p>
-                  </div>
+                <div key={cam.id} style={{ height: '250px' }}>
+                  <VideoPlayer 
+                    cameraId={cam.id}
+                    name={cam.name}
+                    status={cam.status}
+                    hasMotion={false}
+                  />
                 </div>
               ))
             )}
@@ -171,18 +157,9 @@ export const Dashboard = () => {
 
           <div className="glass-panel" style={{ padding: '1.5rem', height: '200px' }}>
             <h3 style={{ marginBottom: '1rem', fontSize: '1rem', margin: 0 }}>Activity Trend</h3>
-            <ResponsiveContainer width="100%" height="80%" style={{ marginTop: '1rem' }}>
-              <AreaChart data={mockChartData}>
-                <defs>
-                  <linearGradient id="colorEvents" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <Tooltip contentStyle={{ backgroundColor: '#12121a', border: '1px solid rgba(255,255,255,0.1)' }} />
-                <Area type="monotone" dataKey="events" stroke="var(--color-primary)" fillOpacity={1} fill="url(#colorEvents)" />
-              </AreaChart>
-            </ResponsiveContainer>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '80%', color: 'var(--text-muted)' }}>
+              No historical trend data available.
+            </div>
           </div>
         </div>
       </div>
