@@ -20,7 +20,9 @@ async def lifespan(app: FastAPI):
     log.info("=== mView Sentinel starting up ===")
 
     # DB tables
+    from sqlalchemy import text
     async with engine.begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
 
     # Check frontend
