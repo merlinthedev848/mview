@@ -26,6 +26,10 @@ class CameraUpdate(BaseModel):
     name: Optional[str] = None
     rtsp_url_main: Optional[str] = None
     rtsp_url_sub: Optional[str] = None
+    onvif_endpoint: Optional[str] = None
+    onvif_username: Optional[str] = None
+    onvif_password: Optional[str] = None
+    resolution: Optional[str] = None
     enabled: Optional[bool] = None
     config: Optional[Dict[str, Any]] = None
     status: Optional[str] = None

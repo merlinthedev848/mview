@@ -8,10 +8,15 @@ import logging
 from pathlib import Path
 
 from api.database import engine, Base
-from api.routers import cameras, recordings, events, system
+from api.routers import cameras, recordings, events, system, auth
 from api.services.recorder import recorder_manager
+from jose import jwt, JWTError
 
 log = logging.getLogger("sentinel")
+
+# Fetch JWT config directly for the middleware
+SECRET_KEY = os.getenv("JWT_SECRET", "super-secret-mview-key")
+ALGORITHM = "HS256"
 
 
 @asynccontextmanager
@@ -61,7 +66,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi.responses import JSONResponse
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    # Protect these API paths
+    protected_paths = ["/cameras", "/events", "/recordings-list", "/system"]
+    path = request.url.path
+    
+    is_protected = any(path.startswith(p) for p in protected_paths)
+    
+    if is_protected and not path.startswith("/system/health"):
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
+        
+        token = auth_header.split(" ")[1]
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            if payload.get("sub") != "admin":
+                return JSONResponse(status_code=401, content={"detail": "Invalid token payload"})
+        except JWTError:
+            return JSONResponse(status_code=401, content={"detail": "Invalid token"})
+            
+    return await call_next(request)
+
 # ── API routers ────────────────────────────────────────────────────
+app.include_router(auth.router)
 app.include_router(cameras.router)
 app.include_router(recordings.router)
 app.include_router(events.router)

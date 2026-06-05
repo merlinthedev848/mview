@@ -6,22 +6,51 @@ import LiveView  from './pages/LiveView';
 import Playback  from './pages/Playback';
 import Events    from './pages/Events';
 import Settings  from './pages/Settings';
+import Login     from './pages/Login';
 
 const API = () => `http://${window.location.hostname}:8000`;
 
-const Sidebar = () => {
+// Setup global fetch interceptor to inject JWT
+const originalFetch = window.fetch;
+window.fetch = async (...args) => {
+  let [resource, config] = args;
+  const token = localStorage.getItem('mview_token');
+  
+  if (token && typeof resource === 'string' && resource.includes(':8000')) {
+     config = config || {};
+     config.headers = {
+       ...config.headers,
+       'Authorization': `Bearer ${token}`
+     };
+  }
+  
+  const res = await originalFetch(resource, config);
+  
+  // If API returns 401 Unauthorized (and not the login endpoint), force logout
+  if (res.status === 401 && typeof resource === 'string' && !resource.includes('/auth/login')) {
+    localStorage.removeItem('mview_token');
+    window.dispatchEvent(new Event('storage')); // Trigger re-render
+  }
+  
+  return res;
+};
+
+const Sidebar = ({ onLogout }: { onLogout: () => void }) => {
   const [cameras, setCameras] = useState<any[]>([]);
   const [events,  setEvents]  = useState<any[]>([]);
+  const [storage, setStorage] = useState<any>(null);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [c, e] = await Promise.all([
+        const [c, e, h] = await Promise.all([
           fetch(`${API()}/cameras`).then(r => r.ok ? r.json() : []),
           fetch(`${API()}/events?limit=100`).then(r => r.ok ? r.json() : []),
+          fetch(`${API()}/system/health`).then(r => r.ok ? r.json() : null),
         ]);
         setCameras(c);
         setEvents(e);
+        if (h && h.storage) setStorage(h.storage);
       } catch {}
     };
     load();
@@ -96,13 +125,18 @@ const Sidebar = () => {
           <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <HardDrive size={12} /> Storage
           </span>
-          <span>—</span>
+          <span>{storage ? `${storage.usage_percent}%` : '—'}</span>
         </div>
         <div className="storage-bar">
-          <div className="storage-bar-fill" style={{ width: '42%' }} />
+          <div className="storage-bar-fill" style={{ width: `${storage ? storage.usage_percent : 0}%` }} />
         </div>
+        {storage && (
+          <div style={{ fontSize: '0.65rem', color: 'var(--t3)', textAlign: 'right', marginTop: '-4px', fontFamily: 'monospace' }}>
+            {storage.used_gb} GB / {storage.total_gb} GB
+          </div>
+        )}
 
-        <button className="nav-item" style={{ color: 'var(--t3)', marginTop: 6 }}>
+        <button className="nav-item" style={{ color: 'var(--t3)', marginTop: 6 }} onClick={onLogout}>
           <LogOut size={15} /> Logout
         </button>
       </div>
@@ -111,10 +145,34 @@ const Sidebar = () => {
 };
 
 function App() {
+  const [token, setToken] = useState(localStorage.getItem('mview_token'));
+
+  useEffect(() => {
+    const handleStorage = () => {
+      setToken(localStorage.getItem('mview_token'));
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  const handleLogin = (t: string) => {
+    localStorage.setItem('mview_token', t);
+    setToken(t);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('mview_token');
+    setToken(null);
+  };
+
+  if (!token) {
+    return <Login onLogin={handleLogin} />;
+  }
+
   return (
     <Router>
       <div className="app-shell">
-        <Sidebar />
+        <Sidebar onLogout={handleLogout} />
         <div className="main-content">
           <Routes>
             <Route path="/"         element={<LiveView />}  />

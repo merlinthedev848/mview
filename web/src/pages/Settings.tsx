@@ -50,7 +50,9 @@ const Settings: React.FC = () => {
   const [savingManual, setSavingManual] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [adopting, setAdopting] = useState<string | null>(null);
+  const [adoptForm, setAdoptForm] = useState<Record<string, {u: string, p: string}>>({});
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [toast, setToast] = useState('');
 
   const showToast = (msg: string) => {
@@ -87,10 +89,10 @@ const Settings: React.FC = () => {
     setDiscovering(false);
   };
 
-  const adoptCamera = async (cam: any) => {
+  const adoptCamera = async (cam: any, u: string, p: string) => {
     setAdopting(cam.id || cam.onvif_endpoint);
     try {
-      const res = await fetch(`${API()}/cameras/adopt`, {
+      const res = await fetch(`${API()}/cameras/adopt?username=${encodeURIComponent(u)}&password=${encodeURIComponent(p)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cam),
@@ -130,16 +132,21 @@ const Settings: React.FC = () => {
         status: 'online',
         auto_adopted: false,
       };
-      const res = await fetch(`${API()}/cameras`, {
-        method: 'POST',
+      
+      const method = editingId ? 'PATCH' : 'POST';
+      const url = editingId ? `${API()}/cameras/${editingId}` : `${API()}/cameras`;
+      
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
       if (res.ok) {
         setManualForm(emptyForm);
         setShowManualForm(false);
+        setEditingId(null);
         await fetchCameras();
-        showToast('Camera added successfully!');
+        showToast(editingId ? 'Camera updated successfully!' : 'Camera added successfully!');
       } else {
         const err = await res.json().catch(() => ({}));
         setSaveError(err.detail || 'Failed to save camera.');
@@ -198,18 +205,20 @@ const Settings: React.FC = () => {
             <>
               {/* ── Existing Cameras ── */}
               <div className="card">
-                <div className="card-header">
-                  <span className="card-title">Active Cameras</span>
-                  <button className="btn btn-primary" onClick={() => setShowManualForm(v => !v)}>
-                    <Plus size={15} /> Add Camera Manually
-                  </button>
+                <div className="card-head">
+                  <span className="card-title">{editingId ? 'Edit Camera' : 'Active Cameras'}</span>
+                  {!showManualForm && (
+                    <button className="btn btn-primary" onClick={() => setShowManualForm(true)}>
+                      <Plus size={15} /> Add Camera Manually
+                    </button>
+                  )}
                 </div>
 
                 {/* Manual Add Form */}
                 {showManualForm && (
                   <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', background: 'rgba(0,229,255,0.03)' }}>
                     <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--cyan)', marginBottom: 14 }}>
-                      ＋ New Camera
+                      {editingId ? 'Edit Camera' : '＋ New Camera'}
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                       <div className="form-group">
@@ -299,14 +308,43 @@ const Settings: React.FC = () => {
                             </span>
                           )}
                         </div>
-                        <button
-                          className="btn btn-danger"
-                          style={{ padding: '6px 10px' }}
-                          onClick={() => deleteCamera(cam.id)}
-                          disabled={deletingId === cam.id}
-                        >
-                          {deletingId === cam.id ? <div className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <Trash2 size={14} />}
-                        </button>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button
+                            className="btn btn-ghost"
+                            style={{ padding: '6px 10px' }}
+                            onClick={() => {
+                              // Extract IP/Port if possible
+                              let ip = '', port = '80';
+                              if (cam.onvif_endpoint) {
+                                const match = cam.onvif_endpoint.match(/http:\/\/([^:]+):(\d+)/);
+                                if (match) { ip = match[1]; port = match[2]; }
+                              }
+                              setManualForm({
+                                name: cam.name,
+                                ip,
+                                port,
+                                onvif_username: '',
+                                onvif_password: '',
+                                rtsp_url_main: cam.rtsp_url_main || '',
+                                rtsp_url_sub: cam.rtsp_url_sub || ''
+                              });
+                              setEditingId(cam.id);
+                              setShowManualForm(true);
+                              // Scroll to top
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            className="btn btn-danger"
+                            style={{ padding: '6px 10px' }}
+                            onClick={() => deleteCamera(cam.id)}
+                            disabled={deletingId === cam.id}
+                          >
+                            {deletingId === cam.id ? <div className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <Trash2 size={14} />}
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -315,7 +353,7 @@ const Settings: React.FC = () => {
 
               {/* ── Auto-Discovery ── */}
               <div className="card">
-                <div className="card-header">
+                <div className="card-head">
                   <span className="card-title">Auto-Discover ONVIF Cameras</span>
                   <button className="btn btn-primary" onClick={discover} disabled={discovering}>
                     {discovering
@@ -344,24 +382,34 @@ const Settings: React.FC = () => {
                     <div style={{ fontSize: '0.8rem', color: 'var(--green)', fontWeight: 600, marginBottom: 4 }}>
                       ✓ Found {discovered.length} device{discovered.length !== 1 ? 's' : ''}
                     </div>
-                    {discovered.map((cam, i) => (
-                      <div key={i} className="discovery-item">
-                        <div className="discovery-item-info">
-                          <div className="name">{cam.manufacturer} {cam.model}</div>
-                          <div className="url">{cam.onvif_endpoint} · {cam.ip}</div>
+                    {discovered.map((cam, i) => {
+                      const creds = adoptForm[cam.onvif_endpoint] || { u: 'admin', p: 'admin' };
+                      const setCreds = (c: any) => setAdoptForm(prev => ({...prev, [cam.onvif_endpoint]: c}));
+                      return (
+                        <div key={i} className="discovery-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div className="discovery-item-info">
+                              <div className="name">{cam.manufacturer} {cam.model}</div>
+                              <div className="url">{cam.onvif_endpoint} · {cam.ip}</div>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 10, marginTop: 10, alignItems: 'center' }}>
+                            <input className="form-input" style={{ width: 140, padding: '6px 10px', fontSize: '0.8rem' }} placeholder="Username" value={creds.u} onChange={e => setCreds({...creds, u: e.target.value})} />
+                            <input className="form-input" style={{ width: 140, padding: '6px 10px', fontSize: '0.8rem' }} type="password" placeholder="Password" value={creds.p} onChange={e => setCreds({...creds, p: e.target.value})} />
+                            <button
+                              className="btn btn-primary"
+                              onClick={() => adoptCamera(cam, creds.u, creds.p)}
+                              disabled={adopting === (cam.id || cam.onvif_endpoint)}
+                            >
+                              {adopting === (cam.id || cam.onvif_endpoint)
+                                ? <div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                                : <><Plus size={14} /> Adopt</>
+                              }
+                            </button>
+                          </div>
                         </div>
-                        <button
-                          className="btn btn-primary"
-                          onClick={() => adoptCamera(cam)}
-                          disabled={adopting === (cam.id || cam.onvif_endpoint)}
-                        >
-                          {adopting === (cam.id || cam.onvif_endpoint)
-                            ? <div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                            : <><Plus size={14} /> Adopt</>
-                          }
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
 
@@ -376,69 +424,168 @@ const Settings: React.FC = () => {
 
           {tab === 'ai' && (
             <div className="card">
-              <div className="card-header"><span className="card-title">AI Pipeline Configuration</span></div>
-              <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div className="form-group">
-                  <label className="form-label">Detection Model</label>
-                  <select className="form-select">
-                    <option value="yolov8n">YOLOv8 Nano (Fastest — CPU optimised)</option>
-                    <option value="yolov8s">YOLOv8 Small (Balanced)</option>
-                    <option value="yolo11n">YOLO11 Nano (Next-Gen)</option>
-                  </select>
+              <div className="card-head">
+                <span className="card-title">AI Pipeline Configuration</span>
+              </div>
+              <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+                  <div className="form-group">
+                    <label className="form-label">Global Detection Model</label>
+                    <select className="form-select">
+                      <option value="yolov8n">YOLOv8 Nano (Fastest — CPU optimised)</option>
+                      <option value="yolov8s">YOLOv8 Small (Balanced)</option>
+                      <option value="yolo11n">YOLO11 Nano (Next-Gen)</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Hardware Accelerator</label>
+                    <select className="form-select">
+                      <option value="auto">Auto-Detect (Recommended)</option>
+                      <option value="cpu">CPU Only</option>
+                      <option value="cuda">NVIDIA CUDA / TensorRT</option>
+                      <option value="openvino">Intel OpenVINO</option>
+                      <option value="coral">Google Coral Edge TPU</option>
+                    </select>
+                  </div>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Hardware Accelerator</label>
-                  <select className="form-select">
-                    <option value="auto">Auto-Detect (Recommended)</option>
-                    <option value="cpu">CPU Only</option>
-                    <option value="cuda">NVIDIA CUDA / TensorRT</option>
-                    <option value="openvino">Intel OpenVINO</option>
-                  </select>
+
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-1)', marginBottom: 16 }}>Detection Capabilities</div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '12px 16px', borderRadius: 8 }}>
+                      <div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-1)' }}>Person & Vehicle Tracking</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-3)', marginTop: 2 }}>Identify and track objects in real-time across all streams.</div>
+                      </div>
+                      <input type="checkbox" defaultChecked style={{ width: 18, height: 18, accentColor: 'var(--cyan)' }} />
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '12px 16px', borderRadius: 8 }}>
+                      <div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-1)' }}>Face Recognition</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-3)', marginTop: 2 }}>Extract and match facial embeddings against the known database.</div>
+                      </div>
+                      <input type="checkbox" style={{ width: 18, height: 18, accentColor: 'var(--cyan)' }} />
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '12px 16px', borderRadius: 8 }}>
+                      <div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-1)' }}>Automatic License Plate Recognition (ALPR)</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-3)', marginTop: 2 }}>Detect and read vehicle license plates using OCR.</div>
+                      </div>
+                      <input type="checkbox" style={{ width: 18, height: 18, accentColor: 'var(--cyan)' }} />
+                    </div>
+                  </div>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Detection Confidence Threshold</label>
-                  <input className="form-input" type="range" min="0.3" max="0.95" step="0.05" defaultValue="0.5" />
+
+                <div className="form-group" style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
+                  <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Global Confidence Threshold</span>
+                    <span style={{ color: 'var(--cyan)' }}>65%</span>
+                  </label>
+                  <input className="form-input" type="range" min="30" max="95" step="5" defaultValue="65" />
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: 4 }}>
+                    Higher thresholds reduce false positives but may miss objects in poor lighting.
+                  </div>
                 </div>
-                <button className="btn btn-primary" style={{ width: 'fit-content' }}>Save AI Config</button>
+
+                <button className="btn btn-primary" style={{ width: 'fit-content' }}><CheckCircle size={15}/> Apply AI Configuration</button>
               </div>
             </div>
           )}
 
           {tab === 'network' && (
             <div className="card">
-              <div className="card-header"><span className="card-title">Network Settings</span></div>
-              <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div className="form-group">
-                  <label className="form-label">go2rtc Proxy Host</label>
-                  <input className="form-input" defaultValue="localhost:1984" />
+              <div className="card-head"><span className="card-title">Advanced Network & Streaming</span></div>
+              <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+                  <div className="form-group">
+                    <label className="form-label">Internal API Port</label>
+                    <input className="form-input" defaultValue="8000" disabled />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">RTSP Proxy Port</label>
+                    <input className="form-input" defaultValue="8554" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">WebRTC API Port (go2rtc)</label>
+                    <input className="form-input" defaultValue="1984" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">WebRTC TCP/UDP Port</label>
+                    <input className="form-input" defaultValue="8555" />
+                  </div>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">WebRTC ICE Servers</label>
-                  <input className="form-input" defaultValue="stun:stun.l.google.com:19302" />
+
+                <div className="form-group" style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
+                  <label className="form-label">WebRTC ICE Servers (STUN/TURN)</label>
+                  <textarea className="form-input" rows={3} defaultValue="stun:stun.l.google.com:19302&#10;stun:global.stun.twilio.com:3478" />
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: 4 }}>
+                    Required for viewing live streams outside your local network. One server per line.
+                  </div>
                 </div>
-                <button className="btn btn-primary" style={{ width: 'fit-content' }}>Save Network Config</button>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,0.02)', padding: '12px 16px', borderRadius: 8 }}>
+                  <input type="checkbox" style={{ width: 16, height: 16, accentColor: 'var(--cyan)' }} />
+                  <div>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-1)' }}>Enable HTTPS / SSL (Let's Encrypt)</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-3)', marginTop: 2 }}>Automatically provision certificates for external access.</div>
+                  </div>
+                </div>
+
+                <button className="btn btn-primary" style={{ width: 'fit-content' }}><CheckCircle size={15}/> Save Network Settings</button>
               </div>
             </div>
           )}
 
           {tab === 'system' && (
             <div className="card">
-              <div className="card-header"><span className="card-title">System</span></div>
-              <div style={{ padding: 20, color: 'var(--text-2)', fontSize: '0.875rem' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                  {[
-                    ['Platform', 'mView Sentinel NVR'],
-                    ['API Version', '1.0.0'],
-                    ['Build', 'Docker (Multi-stage)'],
-                    ['Database', 'PostgreSQL 16 + pgvector'],
-                    ['Message Bus', 'Redis 7 + MQTT (Mosquitto)'],
-                    ['Streaming', 'go2rtc (WebRTC / RTSP)'],
-                  ].map(([k, v]) => (
-                    <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '1px' }}>{k}</span>
-                      <span style={{ fontWeight: 500, color: 'var(--text-1)' }}>{v}</span>
-                    </div>
-                  ))}
+              <div className="card-head"><span className="card-title">System Information & Maintenance</span></div>
+              <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
+                
+                {/* Hardware Metrics Mockup */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                  <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 700 }}>CPU Usage</div>
+                    <div style={{ fontSize: '1.2rem', color: 'var(--text-1)', fontWeight: 600, fontFamily: 'JetBrains Mono' }}>12.4%</div>
+                  </div>
+                  <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 700 }}>RAM Usage</div>
+                    <div style={{ fontSize: '1.2rem', color: 'var(--text-1)', fontWeight: 600, fontFamily: 'JetBrains Mono' }}>4.1 GB</div>
+                  </div>
+                  <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 700 }}>GPU / TPU Util</div>
+                    <div style={{ fontSize: '1.2rem', color: 'var(--cyan)', fontWeight: 600, fontFamily: 'JetBrains Mono' }}>42.8%</div>
+                  </div>
+                  <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 700 }}>Temperature</div>
+                    <div style={{ fontSize: '1.2rem', color: 'var(--green)', fontWeight: 600, fontFamily: 'JetBrains Mono' }}>48°C</div>
+                  </div>
+                </div>
+
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, color: 'var(--text-2)', fontSize: '0.85rem' }}>
+                    {[
+                      ['Platform', 'mView Sentinel NVR'],
+                      ['Version', 'v1.0.0-beta.4'],
+                      ['Architecture', 'x86_64 / Docker'],
+                      ['Database', 'PostgreSQL 15 (Vector-enabled)'],
+                      ['Uptime', '14 days, 3 hours'],
+                      ['Host OS', 'Linux 6.1.0-18-amd64']
+                    ].map(([k, v]) => (
+                      <div key={k} style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px dashed rgba(255,255,255,0.05)' }}>
+                        <span>{k}</span>
+                        <span style={{ color: 'var(--text-1)', fontFamily: 'JetBrains Mono' }}>{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20, display: 'flex', gap: 12 }}>
+                  <button className="btn btn-ghost" style={{ padding: '8px 16px' }}><Loader size={14}/> Check for Updates</button>
+                  <button className="btn btn-ghost" style={{ padding: '8px 16px' }}><Edit2 size={14}/> Backup Database</button>
+                  <button className="btn btn-danger" style={{ padding: '8px 16px', marginLeft: 'auto' }}>Restart NVR Service</button>
                 </div>
               </div>
             </div>

@@ -891,3 +891,131 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.07); border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--cyan-dim); }
+
+/* ── Responsive Design ────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Make app shell a column with sidebar at the bottom */
+  .app-shell {
+    flex-direction: column-reverse;
+  }
+
+  /* Bottom Navigation Sidebar */
+  .sidebar {
+    width: 100%;
+    height: 65px;
+    flex-direction: row;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    padding: 0;
+    align-items: stretch;
+    justify-content: center;
+    background: rgba(8,14,24,0.95);
+    backdrop-filter: blur(14px);
+    z-index: 50;
+  }
+
+  /* Hide elements not needed in bottom nav */
+  .sidebar-logo,
+  .nav-section,
+  .sidebar-footer,
+  .nav-item .nav-badge,
+  .topbar-stats .topbar-stat:not(:first-child) {
+    display: none !important;
+  }
+
+  /* Adjust nav items to act as bottom tabs */
+  .sidebar-nav {
+    flex-direction: row;
+    align-items: stretch;
+    justify-content: space-around;
+    padding: 0;
+    margin: 0;
+    overflow: visible;
+  }
+
+  .nav-item {
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 4px;
+    font-size: 0.65rem;
+    border-radius: 0;
+    text-align: center;
+    border: none !important; /* remove border from active */
+    background: transparent !important;
+    border-top: 2px solid transparent !important;
+  }
+
+  .nav-item.active {
+    border-top: 2px solid var(--cyan) !important;
+    color: var(--cyan);
+  }
+
+  /* Topbar */
+  .topbar {
+    padding: 0 12px;
+  }
+
+  .topbar-tabs {
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+  .topbar-tabs::-webkit-scrollbar { display: none; }
+
+  /* Collapse grids to 1 column */
+  .cam-grid {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto !important;
+    overflow-y: auto;
+  }
+
+  /* Settings Layout */
+  .settings-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    overflow-y: auto;
+  }
+  
+  .settings-nav {
+    flex-direction: row;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    padding: 10px;
+    flex-wrap: nowrap;
+  }
+
+  .settings-nav .nav-item {
+    flex-direction: row;
+    padding: 8px 12px;
+    font-size: 0.75rem;
+    border-radius: var(--r-md);
+    border: none !important;
+  }
+
+  .settings-nav .nav-item.active {
+    background: var(--cyan-dim) !important;
+    color: var(--cyan);
+    border: 1px solid var(--cyan-border) !important;
+  }
+  
+  .settings-content {
+    overflow: visible;
+  }
+
+  /* Playback Layout */
+  .playback-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: 200px 1fr;
+    overflow-y: auto;
+  }
+  
+  .playback-sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+}

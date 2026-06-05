@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Maximize2, Mic, Camera as CamIcon, WifiOff, Focus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const API = () => `http://${window.location.hostname}:8000`;
 
@@ -93,11 +94,11 @@ const CameraFeed: React.FC<CameraFeedProps> = ({ cam }) => {
 
 // ── LiveView page ─────────────────────────────────────────────────
 const LiveView: React.FC = () => {
+  const navigate = useNavigate();
   const [cameras, setCameras] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [layout, setLayout] = useState<1 | 4 | 9>(4);
   const [now, setNow] = useState(new Date());
-  const [tab, setTab] = useState<'live' | 'playback' | 'analytics'>('live');
 
   useEffect(() => {
     const tick = setInterval(() => setNow(new Date()), 1000);
@@ -136,19 +137,16 @@ const LiveView: React.FC = () => {
       <div className="topbar">
         {/* Tabs */}
         <div className="topbar-tabs">
-          {(['live', 'playback', 'analytics'] as const).map(t2 => (
-            <button
-              key={t2}
-              className={`topbar-tab${tab === t2 ? ' active' : ''}`}
-              onClick={() => setTab(t2)}
-            >
-              {t2 === 'live' ? 'Live View' : t2.charAt(0).toUpperCase() + t2.slice(1)}
-            </button>
-          ))}
+          <button className="topbar-tab active">Live View</button>
+          <button className="topbar-tab" onClick={() => navigate('/playback')}>Playback</button>
+          <button className="topbar-tab" onClick={() => navigate('/events')}>Analytics</button>
         </div>
 
         {/* System stats */}
-        <div className="topbar-stats">
+        <div className="topbar-stats" style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-2)', fontFamily: 'JetBrains Mono, monospace' }}>
+            {now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} | {now.toLocaleTimeString('en-US', { hour12: false })}
+          </div>
           <div className="topbar-stat">
             <span className="topbar-stat-label">System Health</span>
             <span className="topbar-stat-value ok">● System OK</span>
@@ -160,6 +158,10 @@ const LiveView: React.FC = () => {
           <div className="topbar-stat">
             <span className="topbar-stat-label">AI Status</span>
             <span className="topbar-stat-value" style={{ color: 'var(--pink)' }}>Active</span>
+          </div>
+          <div className="topbar-stat">
+            <span className="topbar-stat-label">Network</span>
+            <span className="topbar-stat-value" style={{ color: 'var(--cyan)' }}>1.2 Gbps ↓  450 Mbps ↑</span>
           </div>
 
           {/* Layout picker */}

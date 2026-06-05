@@ -31,9 +31,9 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
 
 @router.post("/login")
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    # Stub: Normally we'd query the DB for the User model here.
-    # We are using a hardcoded default admin for the stub.
-    if form_data.username == "admin" and form_data.password == "mview":
+    expected_password = os.getenv("ADMIN_PASSWORD", "admin")
+    
+    if form_data.username == "admin" and form_data.password == expected_password:
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             data={"sub": "admin", "role": "admin"}, expires_delta=access_token_expires
