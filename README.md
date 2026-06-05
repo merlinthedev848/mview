@@ -1,7 +1,7 @@
 # mView Sentinel — The Ultimate Linux NVR Server
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/merlinthedev848/mview/main/docs/logo.png" alt="mView Sentinel Logo" width="200"/>
+  <img src="https://raw.githubusercontent.com/merlinthedev848/mview/main/docs/logo.png" alt="mView Sentinel Logo" width="600"/>
   <br/>
   <strong>Professional-grade, open-source Video Management System with Hardware AI.</strong>
 </div>
