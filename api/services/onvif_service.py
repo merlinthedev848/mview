@@ -1,94 +1,87 @@
-import asyncio
-import socket
-import urllib.parse
-from wsdiscovery.discovery import ThreadedWSDiscovery
-from typing import List, Dict, Any
 import logging
+import asyncio
+from wsdiscovery.discovery import ThreadedWSDiscovery
+from onvif import ONVIFCamera
+import os
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("mView-ONVIF")
 
-class ONVIFAutoDiscover:
+class ONVIFService:
     """
-    Service to automatically discover ONVIF compatible cameras on the local network
-    using WS-Discovery (UDP multicast to 239.255.255.250:3702).
+    Handles WS-Discovery to find local IP Cameras, and uses onvif-zeep 
+    to extract their RTSP capabilities and PTZ commands.
     """
-
     def __init__(self):
-        self.wsd = ThreadedWSDiscovery()
+        self.wsdl_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'wsdl')
         
-    async def start(self):
-        self.wsd.start()
-        
-    async def stop(self):
-        self.wsd.stop()
-
-    async def scan_network(self, timeout: int = 5) -> List[Dict[str, Any]]:
+    async def discover_cameras(self, timeout=5):
         """
-        Scans the local network for ONVIF devices.
-        Returns a list of discovered devices with their IP, manufacturer, and ONVIF endpoint.
+        Broadcasts WS-Discovery UDP packets and parses the responses.
+        Returns a list of discovered ONVIF endpoint URLs.
         """
-        logger.info(f"Starting ONVIF WS-Discovery scan for {timeout} seconds...")
+        logger.info(f"Starting ONVIF WS-Discovery scan (timeout={timeout}s)...")
+        wsd = ThreadedWSDiscovery()
+        wsd.start()
         
-        # In a real implementation we would run this in an executor
-        # but for this MVP we mock the response based on typical WS-Discovery output
-        
-        # Simulate network scanning delay
+        # Give it time to receive UDP responses
         await asyncio.sleep(timeout)
         
-        # Mock discovering cameras (in a full implementation, we'd parse the WS-Discovery envelopes)
-        discovered_cameras = [
-            {
-                "id": "urn:uuid:12345678-1234-1234-1234-123456789012",
-                "ip": "192.168.1.101",
-                "manufacturer": "Hikvision",
-                "model": "DS-2CD2043G0-I",
-                "onvif_endpoint": "http://192.168.1.101/onvif/device_service",
-                "status": "pending_adoption"
-            },
-            {
-                "id": "urn:uuid:87654321-4321-4321-4321-210987654321",
-                "ip": "192.168.1.105",
-                "manufacturer": "Dahua",
-                "model": "IPC-HFW4431R-Z",
-                "onvif_endpoint": "http://192.168.1.105:80/onvif/device_service",
-                "status": "pending_adoption"
-            },
-             {
-                "id": "urn:uuid:11223344-5566-7788-9900-aabbccddeeff",
-                "ip": "192.168.1.110",
-                "manufacturer": "Reolink",
-                "model": "RLC-810A",
-                "onvif_endpoint": "http://192.168.1.110:8000/onvif/device_service",
-                "status": "pending_adoption"
-            }
-        ]
+        services = wsd.searchServices()
+        wsd.stop()
         
-        logger.info(f"Scan complete. Found {len(discovered_cameras)} cameras.")
-        return discovered_cameras
+        discovered = []
+        for service in services:
+            try:
+                # Filter for ONVIF NetworkVideoTransmitter (NVT)
+                types = [t.lower() for t in service.getTypes()]
+                if any('networkvideotransmitter' in t or 'device' in t for t in types):
+                    xaddrs = service.getXAddrs()
+                    if xaddrs:
+                        # Grab the first address
+                        url = xaddrs[0]
+                        discovered.append({
+                            "uuid": service.getEPR(),
+                            "url": url,
+                            "scopes": service.getScopes()
+                        })
+            except Exception as e:
+                logger.error(f"Error parsing WS-Discovery service: {e}")
+                
+        logger.info(f"Discovery complete. Found {len(discovered)} ONVIF devices.")
+        return discovered
 
-    async def probe_camera(self, ip: str, port: int, username: str, password: str) -> Dict[str, Any]:
+    def get_camera_streams(self, ip, port, username, password):
         """
-        Probes a specific camera to get its RTSP stream URLs and capabilities using onvif-zeep.
+        Connects to a camera via ONVIF Profile S and extracts the RTSP URIs.
         """
-        logger.info(f"Probing camera at {ip}:{port}...")
-        
-        # Mock probing process. In real app:
-        # mycam = ONVIFCamera(ip, port, username, password)
-        # media_service = mycam.create_media_service()
-        # profiles = media_service.GetProfiles()
-        # main_uri = media_service.GetStreamUri({'ProfileToken': profiles[0].token})
-        
-        await asyncio.sleep(2) # Simulate connection delay
-        
-        return {
-            "ip": ip,
-            "connected": True,
-            "streams": {
-                "main": f"rtsp://{username}:{password}@{ip}:554/stream1",
-                "sub": f"rtsp://{username}:{password}@{ip}:554/stream2"
-            },
-            "resolution": "4K (3840x2160)",
-            "ptz_capable": True
-        }
+        try:
+            # We must use Zeep's asynchronous bindings or run this in a threadpool in FastAPI
+            mycam = ONVIFCamera(ip, port, username, password, wsdl_dir=self.wsdl_dir)
+            media_service = mycam.create_media_service()
+            profiles = media_service.GetProfiles()
+            
+            streams = []
+            for profile in profiles:
+                try:
+                    # Get RTSP Stream URI for each profile (Main, Sub)
+                    obj = media_service.create_type('GetStreamUri')
+                    obj.ProfileToken = profile.token
+                    obj.StreamSetup = {
+                        'Stream': 'RTP-Unicast',
+                        'Transport': {'Protocol': 'RTSP'}
+                    }
+                    uri = media_service.GetStreamUri(obj)
+                    streams.append({
+                        "profile_name": profile.Name,
+                        "resolution": f"{profile.VideoEncoderConfiguration.Resolution.Width}x{profile.VideoEncoderConfiguration.Resolution.Height}",
+                        "rtsp_url": uri.Uri
+                    })
+                except Exception as e:
+                    logger.warning(f"Failed to get stream for profile {profile.Name}: {e}")
+                    
+            return streams
+        except Exception as e:
+            logger.error(f"Failed to connect to ONVIF camera {ip}: {e}")
+            return None
 
-onvif_service = ONVIFAutoDiscover()
+onvif_service = ONVIFService()

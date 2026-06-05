@@ -1,34 +1,55 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Shield, Activity, HardDrive, AlertTriangle, Play, Settings as SettingsIcon } from 'lucide-react';
-import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { Camera, Shield, Activity, HardDrive, AlertTriangle, Play } from 'lucide-react';
+import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
 
+// Keeping mock chart data as a placeholder until time-series DB is wired
 const mockChartData = [
   { time: '00:00', events: 12 }, { time: '04:00', events: 5 }, { time: '08:00', events: 45 },
   { time: '12:00', events: 32 }, { time: '16:00', events: 68 }, { time: '20:00', events: 24 },
   { time: '24:00', events: 18 }
 ];
 
-const mockCameras = [
-  { id: 1, name: 'Front Door', status: 'recording', lastEvent: 'Person detected (2m ago)' },
-  { id: 2, name: 'Driveway', status: 'recording', lastEvent: 'Vehicle detected (15m ago)' },
-  { id: 3, name: 'Back Garden', status: 'online', lastEvent: 'Motion (1h ago)' },
-  { id: 4, name: 'Side Gate', status: 'offline', lastEvent: 'Connection lost (3h ago)' },
-];
-
-const mockEvents = [
-  { id: 101, cam: 'Front Door', type: 'Person', time: '2m ago', conf: 92 },
-  { id: 102, cam: 'Driveway', type: 'Vehicle', time: '15m ago', conf: 88 },
-  { id: 103, cam: 'Front Door', type: 'Package', time: '45m ago', conf: 95 },
-  { id: 104, cam: 'Side Gate', type: 'Animal', time: '1.5h ago', conf: 76 },
-];
-
 export const Dashboard = () => {
+  const [cameras, setCameras] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [stats, setStats] = useState({ total_cameras: 0, online_cameras: 0, events_today: 0 });
+
+  useEffect(() => {
+    // Fetch Real Data from FastAPI Backend
+    const fetchData = async () => {
+      try {
+        // Fetch real cameras
+        const camRes = await fetch('http://localhost:8000/cameras');
+        if (camRes.ok) {
+          const camData = await camRes.json();
+          setCameras(camData);
+          setStats(s => ({ ...s, total_cameras: camData.length, online_cameras: camData.filter((c: any) => c.status === 'online').length }));
+        }
+
+        // Fetch real events
+        const eventRes = await fetch('http://localhost:8000/events?limit=10');
+        if (eventRes.ok) {
+          const eventData = await eventRes.json();
+          setEvents(eventData);
+          setStats(s => ({ ...s, events_today: eventData.length })); // simplified
+        }
+      } catch (error) {
+        console.error("Failed to fetch real data, is the backend running?", error);
+      }
+    };
+
+    fetchData();
+    // Poll every 5 seconds for real-time updates
+    const interval = setInterval(fetchData, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
       <header style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 className="text-gradient" style={{ fontSize: '2rem' }}>mView Sentinel Overview</h1>
-          <p style={{ color: 'var(--text-muted)' }}>System health and real-time alerts</p>
+          <h1 className="text-gradient" style={{ fontSize: '2rem', margin: 0 }}>mView Sentinel Overview</h1>
+          <p style={{ color: 'var(--text-muted)', margin: 0 }}>System health and real-time alerts</p>
         </div>
       </header>
 
@@ -39,8 +60,8 @@ export const Dashboard = () => {
             <Camera size={32} />
           </div>
           <div>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Active Cameras</p>
-            <div className="stat-value">12<span style={{ fontSize: '1rem', color: 'var(--color-success)', marginLeft: '8px' }}>+3 online</span></div>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Active Cameras</p>
+            <div className="stat-value">{stats.total_cameras || 0}<span style={{ fontSize: '1rem', color: 'var(--color-success)', marginLeft: '8px' }}>{stats.online_cameras} online</span></div>
           </div>
         </div>
         
@@ -49,8 +70,8 @@ export const Dashboard = () => {
             <AlertTriangle size={32} />
           </div>
           <div>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Events Today</p>
-            <div className="stat-value">847<span style={{ fontSize: '1rem', color: 'var(--color-danger)', marginLeft: '8px' }}>+12%</span></div>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Events</p>
+            <div className="stat-value">{stats.events_today || 0}<span style={{ fontSize: '1rem', color: 'var(--color-danger)', marginLeft: '8px' }}>Real-time</span></div>
           </div>
         </div>
 
@@ -59,8 +80,8 @@ export const Dashboard = () => {
             <Activity size={32} />
           </div>
           <div>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px' }}>System Health</p>
-            <div className="stat-value">99.9%<span style={{ fontSize: '1rem', color: 'var(--text-muted)', marginLeft: '8px' }}>CPU 14%</span></div>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>System Health</p>
+            <div className="stat-value">OK<span style={{ fontSize: '1rem', color: 'var(--text-muted)', marginLeft: '8px' }}>DB Connected</span></div>
           </div>
         </div>
 
@@ -69,8 +90,8 @@ export const Dashboard = () => {
             <HardDrive size={32} />
           </div>
           <div>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Storage Used</p>
-            <div className="stat-value">2.3<span style={{ fontSize: '1rem', color: 'var(--text-muted)', marginLeft: '4px' }}>TB / 8TB</span></div>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Storage Used</p>
+            <div className="stat-value">0<span style={{ fontSize: '1rem', color: 'var(--text-muted)', marginLeft: '4px' }}>TB / 8TB</span></div>
           </div>
         </div>
       </div>
@@ -79,66 +100,78 @@ export const Dashboard = () => {
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem' }}>
         {/* Camera Grid */}
         <div className="glass-panel" style={{ padding: '1.5rem' }}>
-          <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Play size={20} color="var(--color-primary)" /> Live Preview Grid
+          <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+            <Play size={20} color="var(--color-primary)" /> Live Camera Grid
           </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
-            {mockCameras.map(cam => (
-              <div key={cam.id} style={{ 
-                position: 'relative', 
-                height: '200px', 
-                background: '#000', 
-                borderRadius: '8px',
-                overflow: 'hidden',
-                border: '1px solid var(--surface-border)'
-              }}>
-                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0) 50%, rgba(0,0,0,0.8) 100%)', zIndex: 1 }}></div>
-                <div style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 2, display: 'flex', gap: '8px' }}>
-                  <div className={`status-indicator ${cam.status}`}></div>
-                </div>
-                <div style={{ position: 'absolute', bottom: '10px', left: '10px', zIndex: 2 }}>
-                  <h4 style={{ color: '#fff', margin: 0, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>{cam.name}</h4>
-                  <p style={{ color: 'var(--color-primary)', fontSize: '0.8rem', margin: 0 }}>{cam.lastEvent}</p>
-                </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '1.5rem' }}>
+            {cameras.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)', padding: '2rem', textAlign: 'center', gridColumn: 'span 2' }}>
+                No cameras found in database. Go to Settings to adopt ONVIF cameras.
               </div>
-            ))}
+            ) : (
+              cameras.map((cam: any) => (
+                <div key={cam.id} style={{ 
+                  position: 'relative', 
+                  height: '200px', 
+                  background: '#000', 
+                  borderRadius: '8px',
+                  overflow: 'hidden',
+                  border: '1px solid var(--surface-border)'
+                }}>
+                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0) 50%, rgba(0,0,0,0.8) 100%)', zIndex: 1 }}></div>
+                  <div style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 2, display: 'flex', gap: '8px' }}>
+                    <div className={`status-indicator ${cam.status || 'offline'}`}></div>
+                  </div>
+                  <div style={{ position: 'absolute', bottom: '10px', left: '10px', zIndex: 2 }}>
+                    <h4 style={{ color: '#fff', margin: 0, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>{cam.name}</h4>
+                    <p style={{ color: 'var(--color-primary)', fontSize: '0.8rem', margin: 0 }}>{cam.rtsp_url}</p>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
         {/* Events Feed & Chart */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <div className="glass-panel" style={{ padding: '1.5rem', flex: 1 }}>
-            <h3 style={{ marginBottom: '1.5rem' }}>Recent Events</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {mockEvents.map(ev => (
-                <div key={ev.id} style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '1rem', 
-                  padding: '0.75rem', 
-                  background: 'rgba(255,255,255,0.02)', 
-                  borderRadius: '8px',
-                  borderLeft: `4px solid ${ev.type === 'Person' ? 'var(--color-danger)' : 'var(--color-primary)'}`
-                }}>
-                  <div style={{ width: '40px', height: '40px', background: '#222', borderRadius: '4px' }}></div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <strong style={{ fontSize: '0.9rem' }}>{ev.type}</strong>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{ev.time}</span>
+          <div className="glass-panel" style={{ padding: '1.5rem', flex: 1, overflowY: 'auto', maxHeight: '400px' }}>
+            <h3 style={{ marginBottom: '1.5rem', margin: 0 }}>Real-Time Events</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
+              {events.length === 0 ? (
+                <div style={{ color: 'var(--text-muted)', textAlign: 'center' }}>Waiting for AI detections...</div>
+              ) : (
+                events.map((ev: any) => (
+                  <div key={ev.id} style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '1rem', 
+                    padding: '0.75rem', 
+                    background: 'rgba(255,255,255,0.02)', 
+                    borderRadius: '8px',
+                    borderLeft: `4px solid ${ev.object_class === 'person' ? 'var(--color-danger)' : 'var(--color-primary)'}`
+                  }}>
+                    <div style={{ width: '40px', height: '40px', background: '#222', borderRadius: '4px' }}></div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <strong style={{ fontSize: '0.9rem', textTransform: 'capitalize' }}>{ev.object_class}</strong>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          {new Date(ev.timestamp).toLocaleTimeString()}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Camera ID: {ev.camera_id}</div>
                     </div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{ev.cam}</div>
+                    <div style={{ fontSize: '0.8rem', padding: '2px 6px', background: 'var(--surface-glass)', borderRadius: '4px', color: 'var(--color-success)' }}>
+                      {Math.round((ev.confidence || 0) * 100)}%
+                    </div>
                   </div>
-                  <div style={{ fontSize: '0.8rem', padding: '2px 6px', background: 'var(--surface-glass)', borderRadius: '4px', color: 'var(--color-success)' }}>
-                    {ev.conf}%
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 
           <div className="glass-panel" style={{ padding: '1.5rem', height: '200px' }}>
-            <h3 style={{ marginBottom: '1rem', fontSize: '1rem' }}>Activity Trend</h3>
-            <ResponsiveContainer width="100%" height="100%">
+            <h3 style={{ marginBottom: '1rem', fontSize: '1rem', margin: 0 }}>Activity Trend</h3>
+            <ResponsiveContainer width="100%" height="80%" style={{ marginTop: '1rem' }}>
               <AreaChart data={mockChartData}>
                 <defs>
                   <linearGradient id="colorEvents" x1="0" y1="0" x2="0" y2="1">

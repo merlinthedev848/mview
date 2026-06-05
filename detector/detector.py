@@ -1,83 +1,126 @@
-import asyncio
 import cv2
 import json
+import time
+import os
 import logging
 from ultralytics import YOLO
-import supervision as sv
-from aiomqtt import Client as MQTTClient
-import os
+import paho.mqtt.client as mqtt
+from semantic_search import semantic_engine
+from PIL import Image
 
-from accelerator import HardwareAccelerator
-
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("mView-Detector")
 
-class ObjectDetector:
+MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
+MQTT_PORT = int(os.getenv("MQTT_PORT", 1883))
+
+# For demonstration, we'll monitor a single camera stream.
+# In a full multi-processing architecture, this would be spawned per camera.
+CAMERA_ID = os.getenv("CAMERA_ID", "default_cam")
+# Fallback to a public RTSP stream or local video file if go2rtc isn't running
+STREAM_URL = os.getenv("STREAM_URL", "rtsp://localhost:8554/camera1") 
+
+class DetectorNode:
     def __init__(self):
-        self.backend = HardwareAccelerator.detect_best_backend()
-        logger.info(f"Initializing YOLO with backend: {self.backend}")
+        logger.info("Initializing YOLOv8 Nano model...")
+        # Automatically downloads yolov8n.pt if not present
+        self.model = YOLO('yolov8n.pt')
         
-        # Load the appropriate model based on hardware
-        # In a full deployment, this downloads the right model weights
-        self.model = YOLO("yolov8n.pt") 
-        
-        # We use Supervision for ByteTrack object tracking
-        self.tracker = sv.ByteTrack()
-        
-        # MQTT for publishing events to the backend API and Home Assistant
-        self.mqtt_broker = os.getenv("MQTT_BROKER", "localhost")
-        
-        # We only care about people, bicycles, cars, motorcycles, etc (COCO classes 0-7, 15-23)
-        self.target_classes = [0, 1, 2, 3, 5, 7, 15, 16] 
+        logger.info(f"Connecting to MQTT Broker at {MQTT_BROKER}:{MQTT_PORT}...")
+        self.mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        try:
+            self.mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
+            self.mqtt_client.loop_start()
+        except Exception as e:
+            logger.error(f"Failed to connect to MQTT: {e}")
+            self.mqtt_client = None
 
-    async def process_stream(self, camera_id: str, stream_url: str):
-        """Connects to a go2rtc sub-stream, extracts frames, and runs AI detection."""
-        logger.info(f"Starting detection pipeline for camera: {camera_id} at {stream_url}")
-        
-        # In production this would be a robust connection handler,
-        # skipping frames to match the desired FPS (e.g. 5fps)
-        cap = cv2.VideoCapture(stream_url)
-        
-        async with MQTTClient(self.mqtt_broker) as mqtt:
-            while cap.isOpened():
-                ret, frame = cap.read()
-                if not ret:
-                    await asyncio.sleep(1) # Wait and try to reconnect
-                    continue
+        self.last_event_time = 0
+        self.cooldown = 5 # seconds between sending events for the same object class
 
-                # 1. Inference
-                results = self.model(frame, classes=self.target_classes, verbose=False)[0]
-                detections = sv.Detections.from_ultralytics(results)
-                
-                # 2. Tracking (Maintains object IDs across frames)
-                detections = self.tracker.update_with_detections(detections)
-                
-                # 3. Publish Events if we detect targets
-                if len(detections) > 0:
-                    event_payload = {
-                        "camera_id": camera_id,
-                        "objects": [
-                            {"class": self.model.names[class_id], "confidence": float(conf), "track_id": int(track_id) if track_id is not None else None}
-                            for class_id, conf, track_id in zip(detections.class_id, detections.confidence, detections.tracker_id)
-                        ]
-                    }
+    def run(self):
+        logger.info(f"Connecting to stream: {STREAM_URL}")
+        cap = cv2.VideoCapture(STREAM_URL)
+        
+        if not cap.isOpened():
+            logger.error("Failed to open video stream. Retrying in 10s...")
+            time.sleep(10)
+            return
+
+        frame_count = 0
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+            
+            # Process every Nth frame to save CPU (e.g., 5 fps)
+            frame_count += 1
+            if frame_count % 6 != 0:
+                continue
+
+            # Run YOLO inference
+            results = self.model(frame, verbose=False, classes=[0, 2, 3, 5, 7]) # person, car, motorcycle, bus, truck
+
+            detections = []
+            for r in results:
+                boxes = r.boxes
+                for box in boxes:
+                    conf = float(box.conf[0])
+                    if conf < 0.5:
+                        continue
                     
-                    # Publish to MQTT topic that the FastAPI event_processor listens to
-                    await mqtt.publish(f"sentinel/events/{camera_id}", payload=json.dumps(event_payload))
-                    logger.debug(f"Published event: {event_payload}")
+                    cls_id = int(box.cls[0])
+                    class_name = self.model.names[cls_id]
+                    x1, y1, x2, y2 = map(int, box.xyxy[0])
+                    
+                    # Generate Semantic Embedding for the detected object
+                    # We crop the image to the bounding box
+                    try:
+                        cropped = frame[y1:y2, x1:x2]
+                        # Convert BGR to RGB for PIL
+                        cropped_rgb = cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB)
+                        pil_img = Image.fromarray(cropped_rgb)
+                        embedding = semantic_engine.embed_image(pil_img)
+                        # Convert to list for JSON serialization
+                        embedding_list = embedding.tolist()
+                    except Exception as e:
+                        logger.error(f"Failed to generate embedding: {e}")
+                        embedding_list = []
 
-                # Sleep to limit FPS
-                await asyncio.sleep(0.2) # ~5 FPS
+                    detections.append({
+                        "class": class_name,
+                        "confidence": conf,
+                        "bbox": [x1, y1, x2, y2],
+                        "embedding": embedding_list
+                    })
 
-async def main():
-    detector = ObjectDetector()
-    
-    # Example: In production, the detector queries the API for the list of cameras to monitor
-    # await detector.process_stream("front_door", "rtsp://localhost:8554/front_door_sub")
-    
-    logger.info("AI Detection Service is ready and waiting for stream allocations.")
-    while True:
-        await asyncio.sleep(60)
+            if detections:
+                self.publish_event(detections)
+
+        cap.release()
+
+    def publish_event(self, detections):
+        now = time.time()
+        if now - self.last_event_time < self.cooldown:
+            return
+        
+        self.last_event_time = now
+        payload = {
+            "camera_id": CAMERA_ID,
+            "timestamp": now,
+            "objects": detections
+        }
+        topic = f"sentinel/events/{CAMERA_ID}"
+        if self.mqtt_client:
+            self.mqtt_client.publish(topic, json.dumps(payload))
+            logger.info(f"Published event with {len(detections)} objects to {topic}")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    node = DetectorNode()
+    # Simple loop to restart if stream dies
+    while True:
+        try:
+            node.run()
+        except Exception as e:
+            logger.error(f"Detector crashed: {e}")
+            time.sleep(5)
