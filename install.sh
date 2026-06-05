@@ -77,7 +77,7 @@ fi
 echo -e "\n\033[1;32m=============================================================\033[0m"
 echo -e "\033[1;32m  mView Sentinel is now running! 🚀\033[0m"
 echo -e "\033[1;32m=============================================================\033[0m"
-echo -e "Web Dashboard: http://localhost:5173"
+echo "Web Dashboard: http://localhost:8000"
 echo -e "API Server:    http://localhost:8000"
 echo -e "go2rtc Proxy:  http://localhost:1984"
 echo -e "\n\033[1;37mTo view logs: cd $INSTALL_DIR && docker compose logs -f\033[0m"
