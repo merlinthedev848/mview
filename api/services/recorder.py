@@ -62,11 +62,16 @@ class CameraRecorder:
         cmd = [
             "ffmpeg",
             "-loglevel", "warning",
+            "-analyzeduration", "10000000",    # 10s analysis duration to correctly identify codecs
+            "-probesize", "10000000",          # 10MB probe size
             "-rtsp_transport", "tcp",          # Use TCP for reliability across all camera makes
             "-i", self.rtsp_url,
+            "-map", "0:v",                     # Map the video stream
+            "-map", "0:a?",                    # Map the audio stream optionally (ignore if absent)
             "-c:v", "copy",                    # Copy video stream — no transcoding, zero quality loss
             "-c:a", "aac",                     # Encode audio to AAC (broadest compatibility)
             "-b:a", "128k",
+            "-ignore_unknown",                 # Skip unknown stream types instead of crashing
             "-f", "segment",
             "-segment_time", str(SEGMENT_DURATION),
             "-segment_format", "mp4",

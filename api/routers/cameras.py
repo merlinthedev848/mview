@@ -69,6 +69,42 @@ async def discover_cameras():
         raise HTTPException(500, f"Discovery failed: {e}")
 
 
+def get_default_rtsp_paths(manufacturer: str | None, model: str | None, ip: str, username: str, password: str) -> tuple[str, str | None]:
+    m = (manufacturer or "").lower()
+    
+    if "hikvision" in m or "hik" in m:
+        return (
+            f"rtsp://{username}:{password}@{ip}:554/Streaming/Channels/101",
+            f"rtsp://{username}:{password}@{ip}:554/Streaming/Channels/102"
+        )
+    elif "dahua" in m or "amcrest" in m or "lts" in m:
+        return (
+            f"rtsp://{username}:{password}@{ip}:554/cam/realmonitor?channel=1&subtype=0",
+            f"rtsp://{username}:{password}@{ip}:554/cam/realmonitor?channel=1&subtype=1"
+        )
+    elif "reolink" in m:
+        return (
+            f"rtsp://{username}:{password}@{ip}:554/h264Preview_01_main",
+            f"rtsp://{username}:{password}@{ip}:554/h264Preview_01_sub"
+        )
+    elif "axis" in m:
+        return (
+            f"rtsp://{username}:{password}@{ip}:554/axis-media/media.amp",
+            None
+        )
+    elif "foscam" in m:
+        return (
+            f"rtsp://{username}:{password}@{ip}:554/videoMain",
+            f"rtsp://{username}:{password}@{ip}:554/videoSub"
+        )
+    else:
+        # Generic fallback
+        return (
+            f"rtsp://{username}:{password}@{ip}:554/stream1",
+            f"rtsp://{username}:{password}@{ip}:554/stream2"
+        )
+
+
 @router.post("/adopt", response_model=CameraResponse, status_code=201)
 async def adopt_camera(
     data: ONVIFDiscoveryResult,
@@ -88,9 +124,10 @@ async def adopt_camera(
         rtsp_sub  = streams[1].get("rtsp_url") if len(streams) > 1 else None
         resolution = streams[0].get("resolution")
     else:
-        # Standard fallback — works on the vast majority of cameras
-        rtsp_main = f"rtsp://{username}:{password}@{data.ip}:554/stream1"
-        rtsp_sub  = f"rtsp://{username}:{password}@{data.ip}:554/stream2"
+        # Fall back to manufacturer-specific defaults
+        rtsp_main, rtsp_sub = get_default_rtsp_paths(
+            data.manufacturer, data.model, data.ip, username, password
+        )
         resolution = None
 
     cam = Camera(
