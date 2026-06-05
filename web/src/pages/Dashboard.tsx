@@ -27,7 +27,7 @@ export const Dashboard = () => {
     <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
       <header style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 className="text-gradient" style={{ fontSize: '2rem' }}>Sentinel Overview</h1>
+          <h1 className="text-gradient" style={{ fontSize: '2rem' }}>mView Sentinel Overview</h1>
           <p style={{ color: 'var(--text-muted)' }}>System health and real-time alerts</p>
         </div>
       </header>
