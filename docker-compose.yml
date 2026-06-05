@@ -29,7 +29,7 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: timescale/timescaledb:latest-pg16
+    image: pgvector/pgvector:pg16
     container_name: sentinel-postgres
     environment:
       - POSTGRES_USER=sentinel

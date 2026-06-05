@@ -9,7 +9,15 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./mview.db")
 engine = create_async_engine(DATABASE_URL, echo=False)
 async_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import text
+
 Base = declarative_base()
+
+# We need to ensure the pgvector extension is created on the postgres database
+async def init_vector_db(engine):
+    async with engine.begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
 
 async def get_db():
     async with async_session_maker() as session:

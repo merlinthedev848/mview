@@ -4,6 +4,8 @@ import { LayoutDashboard, Video, PlaySquare, Settings as SettingsIcon, Map as Ma
 
 import Dashboard from './pages/Dashboard';
 import LiveView from './pages/LiveView';
+import Playback from './pages/Playback';
+import Events from './pages/Events';
 import Settings from './pages/Settings';
 
 const Sidebar = () => {
@@ -96,8 +98,10 @@ function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/live" element={<LiveView />} />
+            <Route path="/playback" element={<Playback />} />
+            <Route path="/events" element={<Events />} />
             <Route path="/settings" element={<Settings />} />
-            <Route path="*" element={<div style={{padding: '3rem', textAlign: 'center', color: 'var(--text-muted)'}}><h1>404</h1><p>Component under construction for Phase 1</p></div>} />
+            <Route path="*" element={<div style={{padding: '3rem', textAlign: 'center', color: 'var(--text-muted)'}}><h1>404</h1><p>Component under construction for Phase 1/2</p></div>} />
           </Routes>
         </main>
       </div>
