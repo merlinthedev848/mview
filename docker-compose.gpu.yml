@@ -1,0 +1,21 @@
+version: '3.8'
+
+# This file overrides the default docker-compose.yml to enable NVIDIA GPU support
+# Usage: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+
+services:
+  detector:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - ACCELERATOR=cuda
+
+  # If we were running a specific TimescaleDB or Postgres build with GPU for pgvector
+  # it would go here, but pgvector usually runs on CPU.
