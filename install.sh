@@ -11,6 +11,13 @@ echo -e "\033[1;36m=============================================================
 
 # 1. System Requirements Check & Auto-Install Docker
 echo -e "\n\033[1;33m[1/5] Checking system dependencies...\033[0m"
+
+if ! command -v git &> /dev/null; then
+    echo "Git not found. Installing Git automatically..."
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -yq && apt-get install -yq git
+fi
+
 if ! command -v docker &> /dev/null; then
     echo "Docker not found. Installing Docker automatically..."
     export DEBIAN_FRONTEND=noninteractive
@@ -33,8 +40,9 @@ if [ -d "$INSTALL_DIR" ]; then
     echo "Directory $INSTALL_DIR already exists. Updating..."
     cd $INSTALL_DIR
     git pull
+    git submodule update --init --recursive
 else
-    git clone https://github.com/merlinthedev848/mview.git $INSTALL_DIR
+    git clone --recursive https://github.com/merlinthedev848/mview.git $INSTALL_DIR
     cd $INSTALL_DIR
 fi
 
