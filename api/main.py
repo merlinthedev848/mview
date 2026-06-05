@@ -18,14 +18,10 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         
-    # Start the ONVIF auto-discovery background listener
-    await onvif_service.start()
-    
     yield
     
     # Shutdown logic
     print("Shutting down mView Sentinel API...")
-    await onvif_service.stop()
     await engine.dispose()
 
 

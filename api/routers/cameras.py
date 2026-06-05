@@ -29,7 +29,7 @@ async def discover_cameras():
     Scans the local network for ONVIF devices using WS-Discovery.
     """
     try:
-        results = await onvif_service.scan_network(timeout=3)
+        results = await onvif_service.discover_cameras(timeout=3)
         return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Discovery failed: {str(e)}")
@@ -42,19 +42,28 @@ async def adopt_camera(discovery_data: ONVIFDiscoveryResult, username: str = "ad
     """
     # 1. Probe the camera via ONVIF to get its streaming profiles
     # Using default port 80 for the mock
-    probe_results = await onvif_service.probe_camera(discovery_data.ip, 80, username, password)
+    import asyncio
+    streams = await asyncio.to_thread(
+        onvif_service.get_camera_streams, discovery_data.ip, 80, username, password
+    )
+    
+    if not streams:
+        raise HTTPException(status_code=400, detail="Failed to retrieve camera streams.")
+    
+    main_stream = streams[0]
+    sub_stream = streams[1] if len(streams) > 1 else streams[0]
     
     # 2. Create the Camera database record
     new_camera = Camera(
         name=f"{discovery_data.manufacturer} {discovery_data.model}",
-        rtsp_url_main=probe_results["streams"]["main"],
-        rtsp_url_sub=probe_results["streams"]["sub"],
+        rtsp_url_main=main_stream.get("rtsp_url"),
+        rtsp_url_sub=sub_stream.get("rtsp_url"),
         onvif_endpoint=discovery_data.onvif_endpoint,
         onvif_username=username,
         onvif_password=password,
         manufacturer=discovery_data.manufacturer,
         model=discovery_data.model,
-        resolution=probe_results["resolution"],
+        resolution=main_stream.get("resolution"),
         status="online",
         auto_adopted=True
     )
