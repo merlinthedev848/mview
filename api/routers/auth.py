@@ -3,7 +3,12 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 import os
+
+from api.database import get_db
+from api.models.user import User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -12,7 +17,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 # 1 day
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
@@ -30,16 +35,36 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 @router.post("/login")
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    expected_password = os.getenv("ADMIN_PASSWORD", "admin")
-    
-    if form_data.username == "admin" and form_data.password == expected_password:
+async def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.username == form_data.username))
+    user = result.scalar_one_or_none()
+
+    if user and verify_password(form_data.password, user.hashed_password):
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        permissions = user.permissions or []
         access_token = create_access_token(
-            data={"sub": "admin", "role": "admin"}, expires_delta=access_token_expires
+            data={
+                "sub": user.username,
+                "user_id": user.id,
+                "role": user.role,
+                "permissions": permissions,
+            },
+            expires_delta=access_token_expires,
         )
-        return {"access_token": access_token, "token_type": "bearer"}
-    
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "role": user.role,
+                "permissions": permissions,
+            },
+        }
+
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Incorrect username or password",
@@ -57,6 +82,11 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
-        return {"username": username, "role": payload.get("role")}
+        return {
+            "id": payload.get("user_id"),
+            "username": username,
+            "role": payload.get("role", "viewer"),
+            "permissions": payload.get("permissions", []),
+        }
     except JWTError:
         raise credentials_exception
