@@ -15,7 +15,7 @@ const Playback: React.FC = () => {
     const load = async () => {
       try {
         const [recRes, camRes] = await Promise.all([
-          fetch(`${API()}/recordings-list/`),
+          fetch(`${API()}/recordings-list`),
           fetch(`${API()}/cameras`),
         ]);
         if (recRes.ok) setRecordings(await recRes.json());

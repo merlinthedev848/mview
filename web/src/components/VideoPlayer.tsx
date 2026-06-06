@@ -118,22 +118,53 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
           </span>
         </div>
         
-        {hasMotion && (
-          <div style={{ 
-            background: 'var(--color-danger)', 
-            color: '#fff', 
-            padding: '2px 8px', 
-            borderRadius: '4px', 
-            fontSize: '0.75rem', 
-            fontWeight: 'bold',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            animation: 'pulse-ring 2s infinite'
-          }}>
-            <Activity size={12} /> MOTION
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {status === 'recording' && (
+            <div style={{
+              background: 'rgba(244, 63, 94, 0.18)',
+              border: '1px solid rgba(244, 63, 94, 0.4)',
+              color: '#fff',
+              padding: '3px 8px',
+              borderRadius: '6px',
+              fontSize: '0.7rem',
+              fontWeight: 'bold',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              letterSpacing: '0.5px',
+              boxShadow: '0 0 12px rgba(244, 63, 94, 0.3)',
+              backdropFilter: 'blur(4px)',
+            }}>
+              <span className="cam-rec-dot" style={{
+                width: '8px',
+                height: '8px',
+                backgroundColor: '#f43f5e',
+                borderRadius: '50%',
+                display: 'inline-block',
+                boxShadow: '0 0 8px #f43f5e',
+                animation: 'heartbeat 1.5s ease-in-out infinite'
+              }}></span>
+              REC
+            </div>
+          )}
+
+          {hasMotion && (
+            <div style={{ 
+              background: 'var(--color-danger)', 
+              color: '#fff', 
+              padding: '2px 8px', 
+              borderRadius: '4px', 
+              fontSize: '0.75rem', 
+              fontWeight: 'bold',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              animation: 'pulse-ring 2s infinite'
+            }}>
+              <Activity size={12} /> MOTION
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Bottom Controls Overlay (Visible on Hover) */}

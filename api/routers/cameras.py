@@ -20,7 +20,15 @@ async def _refresh_recorder(db: AsyncSession):
 @router.get("", response_model=List[CameraResponse])
 async def get_cameras(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Camera))
-    return result.scalars().all()
+    cams = result.scalars().all()
+    
+    # Inject active recording status dynamically
+    recording_ids = recorder_manager.status()
+    for cam in cams:
+        if cam.id in recording_ids:
+            cam.status = "recording"
+            
+    return cams
 
 
 @router.post("", response_model=CameraResponse, status_code=201)

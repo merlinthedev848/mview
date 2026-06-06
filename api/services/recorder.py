@@ -239,7 +239,7 @@ def list_recordings(camera_id: str | None = None) -> list[dict]:
                 "filename": f.name,
                 "path": str(f),
                 "size_mb": round(stat.st_size / 1_048_576, 1),
-                "created_at": datetime.fromtimestamp(stat.st_ctime).isoformat(),
+                "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
                 "url": f"/recordings/{cam_dir.name}/{f.name}",
             })
 
