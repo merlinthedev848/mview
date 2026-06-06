@@ -9,7 +9,8 @@ import asyncio
 from pathlib import Path
 
 from api.database import engine, Base
-from api.routers import cameras, recordings, events, system, auth
+from api.models.user import User
+from api.routers import cameras, recordings, events, system, auth, users, maps
 from api.services.recorder import recorder_manager
 from api.config import settings
 from jose import jwt, JWTError
@@ -43,10 +44,27 @@ async def lifespan(app: FastAPI):
     log.info("=== mView Sentinel starting up ===")
 
     # DB tables
-    from sqlalchemy import text
+    from sqlalchemy import text, select
     async with engine.begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        if engine.url.get_backend_name().startswith("postgresql"):
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
+
+    # Seed a default admin user the first time the database starts.
+    from api.database import async_session_maker as AsyncSessionLocal
+    from api.routers.auth import get_password_hash
+    async with AsyncSessionLocal() as db:
+        existing_users = await db.execute(select(User.id).limit(1))
+        if existing_users.scalar_one_or_none() is None:
+            admin_password = os.getenv("ADMIN_PASSWORD", settings.default_admin_password)
+            db.add(User(
+                username=settings.default_admin_username,
+                hashed_password=get_password_hash(admin_password),
+                role="admin",
+                permissions=["live", "playback", "events", "settings"],
+            ))
+            await db.commit()
+            log.info("Seeded default admin user.")
 
     # Check frontend
     dist = Path(__file__).parent.parent / "web" / "dist"
@@ -57,9 +75,7 @@ async def lifespan(app: FastAPI):
         log.warning(f"Frontend dist: NOT FOUND at {dist} — API-only mode")
 
     # Start recorders for all cameras
-    from api.database import async_session_maker as AsyncSessionLocal
     from api.models.camera import Camera
-    from sqlalchemy.future import select
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Camera))
         cams = result.scalars().all()
@@ -68,6 +84,8 @@ async def lifespan(app: FastAPI):
 
     # Start retention worker
     asyncio.create_task(retention_worker())
+    from api.services.event_processor import process_mqtt_events
+    asyncio.create_task(process_mqtt_events())
 
     yield
 
@@ -91,13 +109,27 @@ from fastapi.responses import JSONResponse
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
-    # Protect these API paths
-    protected_paths = ["/cameras", "/events", "/recordings-list", "/system"]
     path = request.url.path
-    
-    is_protected = any(path.startswith(p) for p in protected_paths)
-    
-    if is_protected and not path.startswith("/system/health"):
+
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
+    path_permissions = [
+        ("/cameras", {"live", "settings"}),
+        ("/recordings-list", {"playback"}),
+        ("/recordings", {"playback"}),
+        ("/events", {"events"}),
+        ("/system", {"settings"}),
+        ("/users", {"settings"}),
+    ]
+
+    required = None
+    for prefix, permissions in path_permissions:
+        if path.startswith(prefix):
+            required = permissions
+            break
+
+    if required and not path.startswith("/system/health"):
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
             return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
@@ -105,8 +137,12 @@ async def auth_middleware(request: Request, call_next):
         token = auth_header.split(" ")[1]
         try:
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            if payload.get("sub") != "admin":
+            if not payload.get("sub"):
                 return JSONResponse(status_code=401, content={"detail": "Invalid token payload"})
+            if payload.get("role") != "admin":
+                user_permissions = set(payload.get("permissions") or [])
+                if not user_permissions.intersection(required):
+                    return JSONResponse(status_code=403, content={"detail": "Permission denied"})
         except JWTError:
             return JSONResponse(status_code=401, content={"detail": "Invalid token"})
             
@@ -118,6 +154,8 @@ app.include_router(cameras.router)
 app.include_router(recordings.router)
 app.include_router(events.router)
 app.include_router(system.router)
+app.include_router(users.router)
+app.include_router(maps.router)
 
 
 @app.get("/system/health")
@@ -152,6 +190,8 @@ INDEX = DIST / "index.html"
 _assets = DIST / "assets"
 if _assets.exists():
     app.mount("/assets", StaticFiles(directory=str(_assets)), name="assets")
+
+app.mount("/static/maps", StaticFiles(directory=maps.UPLOAD_DIR), name="maps")
 
 FALLBACK_HTML = """<!DOCTYPE html>
 <html lang="en">
