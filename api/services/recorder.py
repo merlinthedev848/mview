@@ -142,7 +142,8 @@ async def register_go2rtc_stream(name: str, rtsp_url: str):
         try:
             async with httpx.AsyncClient() as client:
                 res = await client.put(
-                    f"http://127.0.0.1:1984/api/streams?name={name}&src={rtsp_url}",
+                    "http://127.0.0.1:1984/api/streams",
+                    params={"name": name, "src": rtsp_url},
                     timeout=2.0
                 )
                 if res.status_code == 200:
@@ -161,7 +162,7 @@ async def delete_go2rtc_stream(name: str):
     import httpx
     try:
         async with httpx.AsyncClient() as client:
-            res = await client.delete(f"http://127.0.0.1:1984/api/streams?name={name}")
+            res = await client.delete("http://127.0.0.1:1984/api/streams", params={"name": name})
             if res.status_code == 200:
                 logger.info(f"Successfully deleted stream {name} from go2rtc")
             else:
@@ -188,6 +189,8 @@ class RecorderManager:
                 logger.info(f"Stopping recorder for removed camera {cid}")
                 self._recorders.pop(cid).stop()
                 asyncio.create_task(delete_go2rtc_stream(cid))
+                asyncio.create_task(delete_go2rtc_stream(f"{cid}_main"))
+                asyncio.create_task(delete_go2rtc_stream(f"{cid}_sub"))
 
         # Start new or update changed cameras
         for cam in cameras:
@@ -200,7 +203,11 @@ class RecorderManager:
                     self._recorders[cam.id] = rec
                     rec.start()
                     logger.info(f"Started recorder for [{cam.name}] → {record_url}")
-                    asyncio.create_task(register_go2rtc_stream(cam.id, cam.rtsp_url_main))
+                    live_url = cam.rtsp_url_sub or cam.rtsp_url_main
+                    asyncio.create_task(register_go2rtc_stream(cam.id, live_url))
+                    asyncio.create_task(register_go2rtc_stream(f"{cam.id}_main", cam.rtsp_url_main))
+                    if cam.rtsp_url_sub:
+                        asyncio.create_task(register_go2rtc_stream(f"{cam.id}_sub", cam.rtsp_url_sub))
                 else:
                     existing = self._recorders[cam.id]
                     if existing.rtsp_url != record_url or existing.camera_name != cam.name:
@@ -209,7 +216,11 @@ class RecorderManager:
                         rec = CameraRecorder(cam.id, cam.name, record_url)
                         self._recorders[cam.id] = rec
                         rec.start()
-                        asyncio.create_task(register_go2rtc_stream(cam.id, cam.rtsp_url_main))
+                        live_url = cam.rtsp_url_sub or cam.rtsp_url_main
+                        asyncio.create_task(register_go2rtc_stream(cam.id, live_url))
+                        asyncio.create_task(register_go2rtc_stream(f"{cam.id}_main", cam.rtsp_url_main))
+                        if cam.rtsp_url_sub:
+                            asyncio.create_task(register_go2rtc_stream(f"{cam.id}_sub", cam.rtsp_url_sub))
 
     def stop_all(self):
         for rec in self._recorders.values():
