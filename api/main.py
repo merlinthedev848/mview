@@ -5,11 +5,13 @@ from fastapi.responses import FileResponse, HTMLResponse
 from contextlib import asynccontextmanager
 import os
 import logging
+import asyncio
 from pathlib import Path
 
 from api.database import engine, Base
 from api.routers import cameras, recordings, events, system, auth
 from api.services.recorder import recorder_manager
+from api.config import settings
 from jose import jwt, JWTError
 
 log = logging.getLogger("sentinel")
@@ -17,6 +19,22 @@ log = logging.getLogger("sentinel")
 # Fetch JWT config directly for the middleware
 SECRET_KEY = os.getenv("JWT_SECRET", "super-secret-mview-key")
 ALGORITHM = "HS256"
+
+
+async def retention_worker():
+    """Background task to delete recordings older than settings.retention_days."""
+    log.info("Starting retention worker background loop...")
+    while True:
+        try:
+            retention_days = settings.retention_days
+            if retention_days and retention_days > 0:
+                from api.services.recorder import purge_old_recordings
+                purge_old_recordings(retention_days)
+        except Exception as e:
+            log.error(f"Error in retention worker: {e}")
+        
+        # Run every 12 hours (43200 seconds)
+        await asyncio.sleep(12 * 3600)
 
 
 @asynccontextmanager
@@ -47,6 +65,9 @@ async def lifespan(app: FastAPI):
         cams = result.scalars().all()
     await recorder_manager.sync_cameras(cams)
     log.info(f"Recorder started for {len(cams)} camera(s).")
+
+    # Start retention worker
+    asyncio.create_task(retention_worker())
 
     yield
 

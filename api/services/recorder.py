@@ -192,18 +192,21 @@ class RecorderManager:
         # Start new or update changed cameras
         for cam in cameras:
             if cam.enabled and cam.rtsp_url_main:
+                # Determine which URL to record: use substream if configured and available
+                record_url = cam.rtsp_url_sub if (cam.config and cam.config.get("record_substream") is True and cam.rtsp_url_sub) else cam.rtsp_url_main
+                
                 if cam.id not in self._recorders:
-                    rec = CameraRecorder(cam.id, cam.name, cam.rtsp_url_main)
+                    rec = CameraRecorder(cam.id, cam.name, record_url)
                     self._recorders[cam.id] = rec
                     rec.start()
-                    logger.info(f"Started recorder for [{cam.name}] → {cam.rtsp_url_main}")
+                    logger.info(f"Started recorder for [{cam.name}] → {record_url}")
                     asyncio.create_task(register_go2rtc_stream(cam.id, cam.rtsp_url_main))
                 else:
                     existing = self._recorders[cam.id]
-                    if existing.rtsp_url != cam.rtsp_url_main or existing.camera_name != cam.name:
+                    if existing.rtsp_url != record_url or existing.camera_name != cam.name:
                         logger.info(f"Updating recorder for [{cam.name}] due to configuration change...")
                         existing.stop()
-                        rec = CameraRecorder(cam.id, cam.name, cam.rtsp_url_main)
+                        rec = CameraRecorder(cam.id, cam.name, record_url)
                         self._recorders[cam.id] = rec
                         rec.start()
                         asyncio.create_task(register_go2rtc_stream(cam.id, cam.rtsp_url_main))
@@ -242,5 +245,37 @@ def list_recordings(camera_id: str | None = None) -> list[dict]:
                 "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
                 "url": f"/recordings/{cam_dir.name}/{f.name}",
             })
-
     return results
+
+
+def purge_old_recordings(retention_days: int):
+    """Delete recording segment files older than retention_days."""
+    if retention_days <= 0:
+        return
+    
+    logger.info(f"Running auto-purge worker... (retention: {retention_days} days)")
+    from datetime import datetime, timedelta
+    cutoff = datetime.now() - timedelta(days=retention_days)
+    purged_count = 0
+    purged_bytes = 0
+    
+    if not RECORDINGS_BASE.exists():
+        return
+        
+    for cam_dir in RECORDINGS_BASE.iterdir():
+        if not cam_dir.is_dir():
+            continue
+        for f in cam_dir.glob("*.mp4"):
+            try:
+                stat = f.stat()
+                file_time = datetime.fromtimestamp(stat.st_mtime)
+                if file_time < cutoff:
+                    file_size = stat.st_size
+                    f.unlink()
+                    purged_count += 1
+                    purged_bytes += file_size
+            except Exception as e:
+                logger.error(f"Error purging file {f}: {e}")
+                
+    if purged_count > 0:
+        logger.info(f"Auto-purge complete. Deleted {purged_count} files ({round(purged_bytes / 1_048_576, 1)} MB)")

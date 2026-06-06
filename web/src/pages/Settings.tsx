@@ -14,6 +14,7 @@ interface Camera {
   resolution?: string;
   status: string;
   auto_adopted: boolean;
+  config?: any;
   created_at: string;
 }
 
@@ -25,6 +26,7 @@ interface ManualForm {
   onvif_password: string;
   rtsp_url_main: string;
   rtsp_url_sub: string;
+  record_substream: boolean;
 }
 
 const emptyForm: ManualForm = {
@@ -35,6 +37,7 @@ const emptyForm: ManualForm = {
   onvif_password: '',
   rtsp_url_main: '',
   rtsp_url_sub: '',
+  record_substream: false,
 };
 
 type Tab = 'cameras' | 'ai' | 'network' | 'system';
@@ -54,6 +57,44 @@ const Settings: React.FC = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [toast, setToast] = useState('');
+  
+  // Retention Policy State
+  const [retentionDays, setRetentionDays] = useState(30);
+  const [savingRetention, setSavingRetention] = useState(false);
+
+  useEffect(() => {
+    if (tab === 'system') {
+      const fetchRetention = async () => {
+        try {
+          const res = await fetch(`${API()}/system/config`);
+          if (res.ok) {
+            const data = await res.json();
+            setRetentionDays(data.retention_days);
+          }
+        } catch {}
+      };
+      fetchRetention();
+    }
+  }, [tab]);
+
+  const saveRetention = async () => {
+    setSavingRetention(true);
+    try {
+      const res = await fetch(`${API()}/system/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ retention_days: retentionDays })
+      });
+      if (res.ok) {
+        showToast('Retention policy updated successfully!');
+      } else {
+        showToast('Failed to update retention policy.');
+      }
+    } catch {
+      showToast('Network error while updating policy.');
+    }
+    setSavingRetention(false);
+  };
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -131,6 +172,7 @@ const Settings: React.FC = () => {
         model: 'IP Camera',
         status: 'online',
         auto_adopted: false,
+        config: { record_substream: manualForm.record_substream }
       };
       
       const method = editingId ? 'PATCH' : 'POST';
@@ -258,6 +300,15 @@ const Settings: React.FC = () => {
                           value={manualForm.rtsp_url_sub}
                           onChange={e => setManualForm(f => ({ ...f, rtsp_url_sub: e.target.value }))} />
                       </div>
+                      <div className="form-group" style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                        <input type="checkbox" id="recordSubstream"
+                          checked={manualForm.record_substream}
+                          onChange={e => setManualForm(f => ({ ...f, record_substream: e.target.checked }))}
+                          style={{ width: 18, height: 18, accentColor: 'var(--cyan)' }} />
+                        <label htmlFor="recordSubstream" className="form-label" style={{ margin: 0, cursor: 'pointer', fontSize: '0.85rem' }}>
+                          Record Substream (Low Disk Space Mode)
+                        </label>
+                      </div>
                     </div>
                     {saveError && (
                       <div style={{ marginTop: 10, color: 'var(--red)', fontSize: '0.8rem' }}>⚠ {saveError}</div>
@@ -326,7 +377,8 @@ const Settings: React.FC = () => {
                                 onvif_username: '',
                                 onvif_password: '',
                                 rtsp_url_main: cam.rtsp_url_main || '',
-                                rtsp_url_sub: cam.rtsp_url_sub || ''
+                                rtsp_url_sub: cam.rtsp_url_sub || '',
+                                record_substream: cam.config?.record_substream || false
                               });
                               setEditingId(cam.id);
                               setShowManualForm(true);
@@ -561,6 +613,28 @@ const Settings: React.FC = () => {
                   <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 700 }}>Temperature</div>
                     <div style={{ fontSize: '1.2rem', color: 'var(--green)', fontWeight: 600, fontFamily: 'JetBrains Mono' }}>48°C</div>
+                  </div>
+                </div>
+
+                {/* Auto-Purge Retention Policy */}
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-1)', marginBottom: 16 }}>Recording Retention Policy</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 20 }}>
+                    <div className="form-group">
+                      <label className="form-label">Auto-Purge Retention (Days)</label>
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                        <input className="form-input" type="number" min="0" max="365"
+                          value={retentionDays}
+                          onChange={e => setRetentionDays(parseInt(e.target.value) || 0)}
+                          style={{ width: 120 }} />
+                        <button className="btn btn-primary" onClick={saveRetention} disabled={savingRetention}>
+                          Save Policy
+                        </button>
+                      </div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: 4 }}>
+                        Recorded video files older than this will be deleted automatically to save space. Set to 0 to disable auto-purge.
+                      </div>
+                    </div>
                   </div>
                 </div>
 
