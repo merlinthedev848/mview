@@ -215,11 +215,10 @@ const Playback: React.FC = () => {
   // ── 4. Transport Control Handlers ──────────────────────────────────
   const handlePlayPause = () => {
     if (!videoRef.current) return;
-    if (isPlaying) {
-      videoRef.current.pause();
-      setIsPlaying(false);
+    if (videoRef.current.paused) {
+      videoRef.current.play().catch(() => {});
     } else {
-      videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+      videoRef.current.pause();
     }
   };
 
@@ -394,11 +393,15 @@ const Playback: React.FC = () => {
 
               <video
                 ref={videoRef}
+                key={activeFile.url}
                 src={`${API()}${activeFile.url}`}
                 onTimeUpdate={handleTimeUpdate}
                 onLoadedMetadata={handleLoadedMetadata}
                 onEnded={handleVideoEnded}
-                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onClick={handlePlayPause}
+                style={{ width: '100%', height: '100%', objectFit: 'contain', cursor: 'pointer' }}
               />
 
               {/* Bottom Custom Play Bar overlay */}
