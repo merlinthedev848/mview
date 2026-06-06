@@ -26,6 +26,24 @@ services:
     depends_on:
       - postgres
       - redis
+      - mqtt
+    restart: unless-stopped
+
+  detector:
+    build:
+      context: ./detector
+      dockerfile: Dockerfile
+    container_name: sentinel-detector
+    network_mode: host
+    environment:
+      - MQTT_BROKER=127.0.0.1
+      - MQTT_PORT=1883
+      - STREAM_URL=rtsp://127.0.0.1:8554/camera1
+      - CAMERA_ID=default_cam
+      - ACCELERATOR=cpu
+    depends_on:
+      - mqtt
+      - go2rtc
     restart: unless-stopped
 
   postgres:
