@@ -2,9 +2,7 @@ import asyncio
 import json
 import logging
 from aiomqtt import Client as MQTTClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from api.database import async_session_maker
-from api.models.event import Event
 from api.models.ai import SemanticEvent
 import os
 from datetime import datetime
@@ -43,30 +41,17 @@ async def process_mqtt_events():
                         
                         async with async_session_maker() as session:
                             for obj in objects:
-                                # Save the core event
-                                new_event = Event(
+                                embedding = obj.get("embedding")
+                                if not embedding or len(embedding) != 512:
+                                    continue
+
+                                session.add(SemanticEvent(
                                     camera_id=camera_id,
-                                    event_type=obj.get("class"),
+                                    embedding=embedding,
                                     object_class=obj.get("class"),
                                     confidence=obj.get("confidence"),
-                                    bounding_box=obj.get("bbox"),
-                                    timestamp=timestamp
-                                )
-                                session.add(new_event)
-                                
-                                # If we have a semantic embedding, save it to the vector table
-                                embedding = obj.get("embedding")
-                                if embedding and len(embedding) == 512:
-                                    # Create the pgvector record
-                                    semantic_event = SemanticEvent(
-                                        id=new_event.id, # Link them
-                                        camera_id=camera_id,
-                                        embedding=embedding,
-                                        object_class=obj.get("class"),
-                                        confidence=obj.get("confidence"),
-                                        timestamp=timestamp
-                                    )
-                                    session.add(semantic_event)
+                                    timestamp=timestamp,
+                                ))
                                     
                             await session.commit()
                             logger.info(f"Saved {len(objects)} events to Postgres with embeddings.")
