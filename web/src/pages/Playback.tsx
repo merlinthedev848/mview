@@ -6,6 +6,19 @@ import {
 
 const API = () => `http://${window.location.hostname}:8000`;
 
+const inputDate = (date: Date) => {
+  const y = date.getFullYear();
+  const m = `${date.getMonth() + 1}`.padStart(2, '0');
+  const d = `${date.getDate()}`.padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+const inputTime = (date: Date) => {
+  const h = `${date.getHours()}`.padStart(2, '0');
+  const m = `${date.getMinutes()}`.padStart(2, '0');
+  return `${h}:${m}`;
+};
+
 interface Camera {
   id: string;
   name: string;
@@ -49,6 +62,10 @@ const Playback: React.FC = () => {
   const [speedIndex, setSpeedIndex] = useState(1); // default '1x' (speeds[1])
   const [currentTimeMs, setCurrentTimeMs] = useState<number>(0);
   const [activeFile, setActiveFile] = useState<RecordingFile | null>(null);
+  const [buffering, setBuffering] = useState(false);
+  const [videoError, setVideoError] = useState('');
+  const [jumpDate, setJumpDate] = useState(() => inputDate(new Date()));
+  const [jumpTime, setJumpTime] = useState(() => inputTime(new Date()));
 
   // Timeline window (default 6-hour range)
   const [timelineStart, setTimelineStart] = useState<number>(Date.now() - 3 * 3600 * 1000);
@@ -165,6 +182,8 @@ const Playback: React.FC = () => {
       const offsetSeconds = (targetTimeMs - file.startTimestamp) / 1000;
       setActiveFile(file);
       setCurrentTimeMs(targetTimeMs);
+      setVideoError('');
+      setBuffering(true);
       
       if (videoRef.current) {
         if (videoRef.current.src.includes(file.url)) {
@@ -182,8 +201,11 @@ const Playback: React.FC = () => {
           setIsPlaying(true);
         }
       }
+      return true;
     } else {
       setCurrentTimeMs(targetTimeMs);
+      setVideoError('No recording segment covers the selected date and time.');
+      return false;
     }
   };
 
@@ -301,6 +323,18 @@ const Playback: React.FC = () => {
     seekToTime(targetTime);
   };
 
+  const handleJumpToTime = () => {
+    if (!jumpDate || !jumpTime) return;
+    const target = new Date(`${jumpDate}T${jumpTime}`).getTime();
+    if (Number.isNaN(target)) {
+      setVideoError('Choose a valid date and time.');
+      return;
+    }
+    setTimelineStart(target - 3 * 3600 * 1000);
+    setTimelineEnd(target + 3 * 3600 * 1000);
+    seekToTime(target);
+  };
+
   // ── 6. UI Mappings ────────────────────────────────────────────────
   const filteredCameras = cameras.filter(cam =>
     cam.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -413,11 +447,41 @@ const Playback: React.FC = () => {
                 onTimeUpdate={handleTimeUpdate}
                 onLoadedMetadata={handleLoadedMetadata}
                 onEnded={handleVideoEnded}
+                onWaiting={() => setBuffering(true)}
+                onPlaying={() => { setBuffering(false); setIsPlaying(true); }}
+                onCanPlay={() => setBuffering(false)}
+                onError={() => {
+                  setBuffering(false);
+                  setVideoError('Failed to load recording file. The file may be corrupt or missing from disk.');
+                }}
                 onPlay={() => setIsPlaying(true)}
                 onPause={() => setIsPlaying(false)}
                 onClick={handlePlayPause}
                 style={{ width: '100%', height: '100%', objectFit: 'contain', cursor: 'pointer' }}
               />
+
+              {(buffering || videoError) && (
+                <div style={{
+                  position: 'absolute',
+                  left: '50%',
+                  top: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  zIndex: 20,
+                  background: 'rgba(0,0,0,0.72)',
+                  border: `1px solid ${videoError ? 'var(--red)' : 'var(--cyan-border)'}`,
+                  color: videoError ? 'var(--red)' : '#fff',
+                  borderRadius: 10,
+                  padding: '12px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  fontSize: '0.82rem',
+                  boxShadow: '0 8px 30px rgba(0,0,0,0.45)',
+                }}>
+                  {buffering && !videoError && <div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />}
+                  <span>{videoError || 'Buffering recording...'}</span>
+                </div>
+              )}
 
               {/* Bottom Custom Play Bar overlay */}
               <div className="playback-metadata-overlay">
@@ -579,6 +643,29 @@ const Playback: React.FC = () => {
 
           {/* Timeline Controls & Speed Selector Row */}
           <div className="playback-controls-section">
+            <div className="speed-panel" style={{ minWidth: 360 }}>
+              <span className="speed-title">Jump to Date & Time</span>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'center' }}>
+                <input
+                  className="form-input"
+                  type="date"
+                  value={jumpDate}
+                  onChange={e => setJumpDate(e.target.value)}
+                  style={{ height: 30, padding: '4px 9px', fontSize: '0.78rem' }}
+                />
+                <input
+                  className="form-input"
+                  type="time"
+                  value={jumpTime}
+                  onChange={e => setJumpTime(e.target.value)}
+                  style={{ height: 30, padding: '4px 9px', fontSize: '0.78rem' }}
+                />
+                <button className="btn btn-primary" style={{ height: 30, padding: '4px 12px' }} onClick={handleJumpToTime}>
+                  Jump
+                </button>
+              </div>
+            </div>
+
             {/* Transport Controls Bar */}
             <div className="transport-pill">
               <button className="transport-btn" onClick={handleRewind30} title="-30s">
