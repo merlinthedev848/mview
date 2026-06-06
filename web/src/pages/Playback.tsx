@@ -102,10 +102,13 @@ const Playback: React.FC = () => {
               const [_, y, m, d, hr, min, sec] = match;
               start = new Date(parseInt(y), parseInt(m) - 1, parseInt(d), parseInt(hr), parseInt(min), parseInt(sec)).getTime();
             }
+            // Calculate end timestamp dynamically based on the modification time
+            // to show the actual recording duration instead of hardcoded 1 hour.
+            const end = Math.max(start + 5000, new Date(r.created_at).getTime());
             return {
               ...r,
               startTimestamp: start,
-              endTimestamp: start + 60 * 60 * 1000 // 1 hour segment duration
+              endTimestamp: end
             };
           }).sort((a: any, b: any) => a.startTimestamp - b.startTimestamp);
           setRecordings(recs);
@@ -145,7 +148,7 @@ const Playback: React.FC = () => {
     };
 
     loadData();
-    setIsPlaying(false);
+    setIsPlaying(true);
   }, [selectedCam]);
 
   // ── 3. Handle playback logic and seeks ─────────────────────────────
@@ -165,9 +168,18 @@ const Playback: React.FC = () => {
       
       if (videoRef.current) {
         if (videoRef.current.src.includes(file.url)) {
-          videoRef.current.currentTime = offsetSeconds;
+          const duration = videoRef.current.duration;
+          if (!isNaN(duration) && duration > 0) {
+            const clampSeek = Math.min(offsetSeconds, duration > 0.5 ? duration - 0.5 : 0);
+            videoRef.current.currentTime = Math.max(0, clampSeek);
+          } else {
+            videoRef.current.currentTime = offsetSeconds;
+          }
+          videoRef.current.play().catch(() => {});
+          setIsPlaying(true);
         } else {
           pendingSeek.current = offsetSeconds;
+          setIsPlaying(true);
         }
       }
     } else {
@@ -191,7 +203,9 @@ const Playback: React.FC = () => {
 
   const handleLoadedMetadata = () => {
     if (pendingSeek.current !== null && videoRef.current) {
-      videoRef.current.currentTime = pendingSeek.current;
+      const duration = videoRef.current.duration;
+      const clampSeek = Math.min(pendingSeek.current, duration > 0.5 ? duration - 0.5 : 0);
+      videoRef.current.currentTime = Math.max(0, clampSeek);
       pendingSeek.current = null;
     }
     if (isPlaying && videoRef.current) {
@@ -395,6 +409,7 @@ const Playback: React.FC = () => {
                 ref={videoRef}
                 key={activeFile.url}
                 src={`${API()}${activeFile.url}`}
+                autoPlay
                 onTimeUpdate={handleTimeUpdate}
                 onLoadedMetadata={handleLoadedMetadata}
                 onEnded={handleVideoEnded}
@@ -421,12 +436,7 @@ const Playback: React.FC = () => {
                   <div className="playback-pill">Time</div>
                   <div className="playback-pill">{selectedCam?.name}</div>
                   <div className="playback-pill">{selectedCam?.resolution || '1080p'}</div>
-                  {selectedCam?.status === 'recording' && (
-                    <div className="playback-pill danger">
-                      <span style={{ width: 6, height: 6, background: 'var(--red)', borderRadius: '50%', display: 'inline-block', animation: 'heartbeat 1.5s infinite' }} />
-                      Rec
-                    </div>
-                  )}
+
                   <button 
                     style={{ background: 'transparent', border: 'none', color: 'var(--t2)', cursor: 'pointer', padding: 4 }}
                     onClick={() => videoRef.current?.requestFullscreen()}
@@ -483,6 +493,14 @@ const Playback: React.FC = () => {
             ref={timelineRef}
             onClick={handleTimelineClick}
           >
+            {/* Lane Separators */}
+            <div className="timeline-track-separator t1" />
+            <div className="timeline-track-separator t2" />
+            <div className="timeline-track-separator t3" />
+
+            {/* Sidebar background overlay for labels */}
+            <div className="timeline-labels-bg" />
+
             {/* Visual labels on tracks */}
             <div className="timeline-track-label motion">Motion</div>
             <div className="timeline-track-label person">Person</div>
