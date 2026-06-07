@@ -17,7 +17,8 @@ from pathlib import Path
 logger = logging.getLogger("mView-Recorder")
 
 RECORDINGS_BASE = Path(os.environ.get("RECORDINGS_DIR", "/mnt/storage/mview/recordings"))
-SEGMENT_DURATION = int(os.environ.get("SEGMENT_MINUTES", "60")) * 60  # seconds
+SEGMENT_DURATION = int(os.environ.get("SEGMENT_SECONDS") or (int(os.environ.get("SEGMENT_MINUTES", "1")) * 60))
+RECORD_SUBSTREAM_DEFAULT = os.environ.get("RECORD_SUBSTREAM_DEFAULT", "false").lower() in {"1", "true", "yes", "on"}
 
 
 class CameraRecorder:
@@ -195,8 +196,11 @@ class RecorderManager:
         # Start new or update changed cameras
         for cam in cameras:
             if cam.enabled and cam.rtsp_url_main:
-                # Determine which URL to record: use substream if configured and available
-                record_url = cam.rtsp_url_sub if (cam.config and cam.config.get("record_substream") is True and cam.rtsp_url_sub) else cam.rtsp_url_main
+                # Prefer substream for storage savings when enabled globally or per camera.
+                use_substream = RECORD_SUBSTREAM_DEFAULT
+                if cam.config and "record_substream" in cam.config:
+                    use_substream = cam.config.get("record_substream") is True
+                record_url = cam.rtsp_url_sub if (use_substream and cam.rtsp_url_sub) else cam.rtsp_url_main
                 
                 if cam.id not in self._recorders:
                     rec = CameraRecorder(cam.id, cam.name, record_url)
@@ -248,6 +252,9 @@ def list_recordings(camera_id: str | None = None) -> list[dict]:
             continue
         for f in sorted(cam_dir.glob("*.mp4"), reverse=True):
             stat = f.stat()
+            age_seconds = (datetime.now() - datetime.fromtimestamp(stat.st_mtime)).total_seconds()
+            if stat.st_size == 0 or age_seconds < 12:
+                continue
             results.append({
                 "camera_id": cam_dir.name,
                 "filename": f.name,

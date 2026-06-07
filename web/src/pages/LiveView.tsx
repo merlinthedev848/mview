@@ -83,14 +83,30 @@ const CameraFeed: React.FC<{
 }> = ({ cam, iceServers, analytics = false, maximized = false, paused = false, onMaximize }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [connected, setConnected] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
   const streamName = maximized ? `${cam.id}_main` : cam.rtsp_url_sub ? `${cam.id}_sub` : cam.id;
 
   useEffect(() => {
     if (cam.status === 'offline' || !cam.rtsp_url_main) return;
 
     const pc = new RTCPeerConnection({ iceServers });
+    let retryTimer: number | undefined;
+    let watchdog: number | undefined;
+    setConnected(false);
+
+    const scheduleRetry = () => {
+      if (retryTimer) return;
+      retryTimer = window.setTimeout(() => setRetryNonce(n => n + 1), 1500);
+    };
+
     pc.addTransceiver('video', { direction: 'recvonly' });
     pc.addTransceiver('audio', { direction: 'recvonly' });
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+        scheduleRetry();
+      }
+    };
 
     pc.ontrack = e => {
       if (videoRef.current && videoRef.current.srcObject !== e.streams[0]) {
@@ -107,17 +123,24 @@ const CameraFeed: React.FC<{
           method: 'POST',
           body: offer.sdp,
         });
-        if (res.ok) await pc.setRemoteDescription({ type: 'answer', sdp: await res.text() });
+        if (!res.ok) throw new Error(`go2rtc WebRTC returned ${res.status}`);
+        await pc.setRemoteDescription({ type: 'answer', sdp: await res.text() });
+        watchdog = window.setTimeout(() => {
+          if (!videoRef.current?.srcObject) scheduleRetry();
+        }, 7000);
       } catch (e) {
         console.error('[WebRTC]', cam.name, e);
+        scheduleRetry();
       }
     })();
 
     return () => {
+      if (retryTimer) window.clearTimeout(retryTimer);
+      if (watchdog) window.clearTimeout(watchdog);
       pc.close();
       setConnected(false);
     };
-  }, [cam.id, cam.name, cam.status, cam.rtsp_url_main, streamName, JSON.stringify(iceServers)]);
+  }, [cam.id, cam.name, cam.status, cam.rtsp_url_main, streamName, retryNonce, JSON.stringify(iceServers)]);
 
   useEffect(() => {
     const video = videoRef.current;

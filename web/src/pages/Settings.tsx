@@ -378,14 +378,14 @@ const Settings: React.FC = () => {
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div className="settings-page" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       {/* Top Bar */}
-      <div className="topbar" style={{ justifyContent: 'space-between' }}>
+      <div className="topbar settings-page-topbar" style={{ justifyContent: 'space-between' }}>
         <h1 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-1)' }}>System Configuration</h1>
         <span style={{ fontSize: '0.8rem', color: 'var(--text-2)' }}>Manage hardware, AI pipelines and network settings</span>
       </div>
 
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '200px 1fr', gap: 16, padding: 20, overflow: 'hidden', minHeight: 0 }}>
+      <div className="settings-page-layout" style={{ flex: 1, display: 'grid', gridTemplateColumns: '200px 1fr', gap: 16, padding: 20, overflow: 'hidden', minHeight: 0 }}>
         {/* Sidebar nav */}
         <div className="settings-nav">
           {navTabs.map(t => (
@@ -400,7 +400,7 @@ const Settings: React.FC = () => {
         </div>
 
         {/* Content */}
-        <div style={{ overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 20, paddingRight: 4 }}>
+        <div className="settings-page-content" style={{ overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 20, paddingRight: 4 }}>
 
           {tab === 'cameras' && (
             <>

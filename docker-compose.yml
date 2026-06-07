@@ -20,7 +20,8 @@ services:
       - REDIS_URL=redis://127.0.0.1:6379/0
       - MQTT_BROKER=127.0.0.1
       - RECORDINGS_DIR=/mnt/storage/mview/recordings
-      - SEGMENT_MINUTES=60
+      - SEGMENT_SECONDS=60
+      - RECORD_SUBSTREAM_DEFAULT=true
     volumes:
       - /mnt/storage/mview/recordings:/mnt/storage/mview/recordings
     depends_on:

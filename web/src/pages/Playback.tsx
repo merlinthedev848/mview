@@ -247,6 +247,22 @@ const Playback: React.FC = () => {
     }
   };
 
+  const handleRecordingError = () => {
+    setBuffering(false);
+    if (activeFile) {
+      const currentIndex = recordings.findIndex(r => r.url === activeFile.url);
+      if (currentIndex > 0) {
+        const previousFile = recordings[currentIndex - 1];
+        setActiveFile(previousFile);
+        setCurrentTimeMs(previousFile.startTimestamp);
+        pendingSeek.current = 0;
+        setVideoError('Skipped an unfinished recording segment.');
+        return;
+      }
+    }
+    setVideoError('Failed to load recording file. The segment may still be finalizing.');
+  };
+
   // ── 4. Transport Control Handlers ──────────────────────────────────
   const handlePlayPause = () => {
     if (!videoRef.current) return;
@@ -455,10 +471,7 @@ const Playback: React.FC = () => {
                 onWaiting={() => setBuffering(true)}
                 onPlaying={() => { setBuffering(false); setIsPlaying(true); }}
                 onCanPlay={() => setBuffering(false)}
-                onError={() => {
-                  setBuffering(false);
-                  setVideoError('Failed to load recording file. The file may be corrupt or missing from disk.');
-                }}
+                onError={handleRecordingError}
                 onPlay={() => setIsPlaying(true)}
                 onPause={() => setIsPlaying(false)}
                 onClick={handlePlayPause}
