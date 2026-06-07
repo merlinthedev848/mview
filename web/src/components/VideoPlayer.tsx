@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Camera, Maximize, Mic, Video as VideoIcon, Activity, Focus } from 'lucide-react';
+import { go2rtcUrl } from '../lib/endpoints';
 
 interface VideoPlayerProps {
   cameraId: string;
@@ -35,9 +36,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
-        // Fetch answer from go2rtc API running on port 1984
-        const host = window.location.hostname;
-        const response = await fetch(`http://${host}:1984/api/webrtc?src=${cameraId}`, {
+        // Fetch answer from go2rtc API.
+        const response = await fetch(go2rtcUrl(`/api/webrtc?src=${cameraId}`), {
           method: 'POST',
           body: offer.sdp
         });

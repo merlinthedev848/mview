@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Camera, Shield, Activity, HardDrive, AlertTriangle, Play } from 'lucide-react';
 import VideoPlayer from '../components/VideoPlayer';
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
+import { apiUrl } from '../lib/endpoints';
 
 
 export const Dashboard = () => {
@@ -14,7 +15,7 @@ export const Dashboard = () => {
     const fetchData = async () => {
       try {
         // Fetch real cameras
-        const camRes = await fetch('http://localhost:8000/cameras');
+        const camRes = await fetch(apiUrl('/cameras'));
         if (camRes.ok) {
           const camData = await camRes.json();
           setCameras(camData);
@@ -22,7 +23,7 @@ export const Dashboard = () => {
         }
 
         // Fetch real events
-        const eventRes = await fetch('http://localhost:8000/events?limit=10');
+        const eventRes = await fetch(apiUrl('/events?limit=10'));
         if (eventRes.ok) {
           const eventData = await eventRes.json();
           setEvents(eventData);

@@ -131,10 +131,15 @@ async def auth_middleware(request: Request, call_next):
 
     if required and not path.startswith("/system/health"):
         auth_header = request.headers.get("Authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
+        token = None
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ")[1]
+        elif path.startswith("/recordings/"):
+            token = request.query_params.get("token")
+
+        if not token:
             return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
-        
-        token = auth_header.split(" ")[1]
+
         try:
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
             if not payload.get("sub"):

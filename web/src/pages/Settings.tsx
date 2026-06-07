@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Trash2, Edit2, Wifi, WifiOff, CheckCircle, XCircle, Loader, ChevronDown, ChevronRight, ShieldCheck, KeyRound } from 'lucide-react';
-
-const API = () => `http://${window.location.hostname}:8000`;
+import { apiUrl } from '../lib/endpoints';
 
 interface Camera {
   id: string;
@@ -139,7 +138,7 @@ const Settings: React.FC = () => {
 
   const loadSystemConfig = async () => {
     try {
-      const res = await fetch(`${API()}/system/config`);
+      const res = await fetch(apiUrl('/system/config'));
       if (res.ok) {
         const data = await res.json();
         setSystemConfig({
@@ -155,7 +154,7 @@ const Settings: React.FC = () => {
   const saveSystemConfig = async (nextConfig: SystemConfig = systemConfig) => {
     setSavingConfig(true);
     try {
-      const res = await fetch(`${API()}/system/config`, {
+      const res = await fetch(apiUrl('/system/config'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(nextConfig)
@@ -181,7 +180,7 @@ const Settings: React.FC = () => {
   const fetchUsers = async () => {
     setUsersError('');
     try {
-      const res = await fetch(`${API()}/users`);
+      const res = await fetch(apiUrl('/users'));
       if (res.ok) {
         setUsers(await res.json());
       } else {
@@ -199,7 +198,7 @@ const Settings: React.FC = () => {
       return;
     }
     try {
-      const res = await fetch(`${API()}/users`, {
+      const res = await fetch(apiUrl('/users'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newUser),
@@ -220,7 +219,7 @@ const Settings: React.FC = () => {
   const deleteUser = async (userId: string) => {
     if (!window.confirm('Delete this user?')) return;
     try {
-      const res = await fetch(`${API()}/users/${userId}`, { method: 'DELETE' });
+      const res = await fetch(apiUrl(`/users/${userId}`), { method: 'DELETE' });
       if (res.ok) {
         await fetchUsers();
         showToast('User deleted.');
@@ -237,7 +236,7 @@ const Settings: React.FC = () => {
     if (!currentUser.id || !passwordForm.new_password.trim()) return;
     setSavingPassword(true);
     try {
-      const res = await fetch(`${API()}/users/${currentUser.id}/password`, {
+      const res = await fetch(apiUrl(`/users/${currentUser.id}/password`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(passwordForm),
@@ -262,7 +261,7 @@ const Settings: React.FC = () => {
 
   const fetchCameras = async () => {
     try {
-      const res = await fetch(`${API()}/cameras`);
+      const res = await fetch(apiUrl('/cameras'));
       if (res.ok) setCameras(await res.json());
     } catch {}
   };
@@ -275,7 +274,7 @@ const Settings: React.FC = () => {
     setDiscovered([]);
     setDiscoveryError('');
     try {
-      const res = await fetch(`${API()}/cameras/discover`, { method: 'POST' });
+      const res = await fetch(apiUrl('/cameras/discover'), { method: 'POST' });
       if (res.ok) {
         const data = await res.json();
         setDiscovered(data);
@@ -292,7 +291,7 @@ const Settings: React.FC = () => {
   const adoptCamera = async (cam: any, u: string, p: string) => {
     setAdopting(cam.id || cam.onvif_endpoint);
     try {
-      const res = await fetch(`${API()}/cameras/adopt?username=${encodeURIComponent(u)}&password=${encodeURIComponent(p)}`, {
+      const res = await fetch(apiUrl(`/cameras/adopt?username=${encodeURIComponent(u)}&password=${encodeURIComponent(p)}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cam),
@@ -335,7 +334,7 @@ const Settings: React.FC = () => {
       };
       
       const method = editingId ? 'PATCH' : 'POST';
-      const url = editingId ? `${API()}/cameras/${editingId}` : `${API()}/cameras`;
+      const url = editingId ? apiUrl(`/cameras/${editingId}`) : apiUrl('/cameras');
       
       const res = await fetch(url, {
         method,
@@ -363,7 +362,7 @@ const Settings: React.FC = () => {
     if (!window.confirm('Delete this camera? This cannot be undone.')) return;
     setDeletingId(id);
     try {
-      await fetch(`${API()}/cameras/${id}`, { method: 'DELETE' });
+      await fetch(apiUrl(`/cameras/${id}`), { method: 'DELETE' });
       await fetchCameras();
       showToast('Camera removed.');
     } catch {}
@@ -410,7 +409,12 @@ const Settings: React.FC = () => {
                 <div className="card-head">
                   <span className="card-title">{editingId ? 'Edit Camera' : 'Active Cameras'}</span>
                   {!showManualForm && (
-                    <button className="btn btn-primary" onClick={() => setShowManualForm(true)}>
+                    <button className="btn btn-primary" onClick={() => {
+                      setEditingId(null);
+                      setManualForm(emptyForm);
+                      setSaveError('');
+                      setShowManualForm(true);
+                    }}>
                       <Plus size={15} /> Add Camera Manually
                     </button>
                   )}
@@ -450,13 +454,15 @@ const Settings: React.FC = () => {
                       </div>
                       <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                         <label className="form-label">RTSP Main Stream URL (optional, auto-built from IP if empty)</label>
-                        <input className="form-input" placeholder="rtsp://admin:pass@192.168.1.100:554/stream1"
+                        <input className="form-input" type="password" autoComplete="off" spellCheck={false}
+                          placeholder="rtsp://username:password@camera-ip:554/stream1"
                           value={manualForm.rtsp_url_main}
                           onChange={e => setManualForm(f => ({ ...f, rtsp_url_main: e.target.value }))} />
                       </div>
                       <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                         <label className="form-label">RTSP Sub Stream URL (optional)</label>
-                        <input className="form-input" placeholder="rtsp://admin:pass@192.168.1.100:554/stream2"
+                        <input className="form-input" type="password" autoComplete="off" spellCheck={false}
+                          placeholder="rtsp://username:password@camera-ip:554/stream2"
                           value={manualForm.rtsp_url_sub}
                           onChange={e => setManualForm(f => ({ ...f, rtsp_url_sub: e.target.value }))} />
                       </div>
@@ -477,7 +483,7 @@ const Settings: React.FC = () => {
                       <button className="btn btn-primary" onClick={addManually} disabled={savingManual}>
                         {savingManual ? <><div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Saving…</> : <><CheckCircle size={15} /> Save Camera</>}
                       </button>
-                      <button className="btn btn-ghost" onClick={() => { setShowManualForm(false); setSaveError(''); setManualForm(emptyForm); }}>
+                      <button className="btn btn-ghost" onClick={() => { setShowManualForm(false); setSaveError(''); setEditingId(null); setManualForm(emptyForm); }}>
                         Cancel
                       </button>
                     </div>
@@ -499,8 +505,8 @@ const Settings: React.FC = () => {
                         <div className={`dot ${cam.status === 'offline' ? 'offline' : cam.status === 'recording' ? 'recording' : 'online'}`} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-1)' }}>{cam.name}</div>
-                          <div style={{ fontSize: '0.72rem', color: 'var(--text-3)', fontFamily: 'JetBrains Mono, monospace', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {cam.rtsp_url_main || cam.onvif_endpoint || '—'}
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-3)', marginTop: 2 }}>
+                            {[cam.resolution, cam.auto_adopted ? 'Auto-adopted' : 'Manual'].filter(Boolean).join(' / ')}
                           </div>
                         </div>
                         <div style={{ display: 'flex', gap: 6 }}>

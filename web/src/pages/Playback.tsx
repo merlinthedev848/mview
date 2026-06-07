@@ -3,8 +3,7 @@ import {
   Play, Pause, RotateCcw, RotateCw, SkipBack, SkipForward, 
   Search, Video, Download, Maximize2 
 } from 'lucide-react';
-
-const API = () => `http://${window.location.hostname}:8000`;
+import { apiUrl } from '../lib/endpoints';
 
 const inputDate = (date: Date) => {
   const y = date.getFullYear();
@@ -81,7 +80,7 @@ const Playback: React.FC = () => {
   useEffect(() => {
     const loadCameras = async () => {
       try {
-        const res = await fetch(`${API()}/cameras`);
+        const res = await fetch(apiUrl('/cameras'));
         if (res.ok) {
           const data = await res.json();
           setCameras(data);
@@ -104,8 +103,8 @@ const Playback: React.FC = () => {
     const loadData = async () => {
       try {
         const [recRes, eventRes] = await Promise.all([
-          fetch(`${API()}/recordings-list?camera_id=${selectedCam.id}`),
-          fetch(`${API()}/events?camera_id=${selectedCam.id}&limit=200`)
+          fetch(apiUrl(`/recordings-list?camera_id=${selectedCam.id}`)),
+          fetch(apiUrl(`/events?camera_id=${selectedCam.id}&limit=200`))
         ]);
 
         let recs: RecordingFile[] = [];
@@ -340,6 +339,12 @@ const Playback: React.FC = () => {
     cam.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const recordingSrc = (url: string) => {
+    const token = localStorage.getItem('mview_token');
+    const separator = url.includes('?') ? '&' : '?';
+    return apiUrl(token ? `${url}${separator}token=${encodeURIComponent(token)}` : url);
+  };
+
   const formatTimeHM = (timeMs: number) => {
     if (!timeMs) return '--:--';
     return new Date(timeMs).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -442,7 +447,7 @@ const Playback: React.FC = () => {
               <video
                 ref={videoRef}
                 key={activeFile.url}
-                src={`${API()}${activeFile.url}`}
+                src={recordingSrc(activeFile.url)}
                 autoPlay
                 onTimeUpdate={handleTimeUpdate}
                 onLoadedMetadata={handleLoadedMetadata}

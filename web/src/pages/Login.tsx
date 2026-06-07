@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { ShieldCheck, Lock } from 'lucide-react';
-
-const API = () => `http://${window.location.hostname}:8000`;
+import { apiUrl } from '../lib/endpoints';
 
 interface LoginProps {
   onLogin: (token: string) => void;
@@ -24,7 +23,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       formData.append('username', 'admin');
       formData.append('password', password);
 
-      const res = await fetch(`${API()}/auth/login`, {
+      const res = await fetch(apiUrl('/auth/login'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',

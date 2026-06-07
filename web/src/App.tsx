@@ -7,8 +7,8 @@ import Playback  from './pages/Playback';
 import Events    from './pages/Events';
 import Settings  from './pages/Settings';
 import Login     from './pages/Login';
-
-const API = () => `http://${window.location.hostname}:8000`;
+import Wallboard from './pages/Wallboard';
+import { apiUrl } from './lib/endpoints';
 
 // Setup global fetch interceptor to inject JWT
 const originalFetch = window.fetch;
@@ -16,7 +16,7 @@ window.fetch = async (...args) => {
   let [resource, config] = args;
   const token = localStorage.getItem('mview_token');
   
-  if (token && typeof resource === 'string' && resource.includes(':8000')) {
+  if (token && typeof resource === 'string' && !resource.includes('/auth/login') && !resource.includes('/go2rtc/')) {
      config = config || {};
      config.headers = {
        ...config.headers,
@@ -44,9 +44,9 @@ const Sidebar = ({ onLogout }: { onLogout: () => void }) => {
     const load = async () => {
       try {
         const [c, e, h] = await Promise.all([
-          fetch(`${API()}/cameras`).then(r => r.ok ? r.json() : []),
-          fetch(`${API()}/events?limit=100`).then(r => r.ok ? r.json() : []),
-          fetch(`${API()}/system/health`).then(r => r.ok ? r.json() : null),
+          fetch(apiUrl('/cameras')).then(r => r.ok ? r.json() : []),
+          fetch(apiUrl('/events?limit=100')).then(r => r.ok ? r.json() : []),
+          fetch(apiUrl('/system/health')).then(r => r.ok ? r.json() : null),
         ]);
         setCameras(c);
         setEvents(e);
@@ -125,7 +125,7 @@ const Sidebar = ({ onLogout }: { onLogout: () => void }) => {
           <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <HardDrive size={12} /> Storage
           </span>
-          <span>{storage ? `${storage.usage_percent}%` : '—'}</span>
+          <span>{storage ? `${storage.usage_percent}%` : '--'}</span>
         </div>
         <div className="storage-bar">
           <div className="storage-bar-fill" style={{ width: `${storage ? storage.usage_percent : 0}%` }} />
@@ -167,6 +167,14 @@ function App() {
 
   if (!token) {
     return <Login onLogin={handleLogin} />;
+  }
+
+  if (window.location.pathname === '/wallboard') {
+    return (
+      <Router>
+        <Wallboard />
+      </Router>
+    );
   }
 
   return (

@@ -13,9 +13,7 @@ import {
   WifiOff,
 } from 'lucide-react';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-
-const API = () => `http://${window.location.hostname}:8000`;
-const GO2RTC = () => `http://${window.location.hostname}:1984`;
+import { apiUrl, go2rtcUrl } from '../lib/endpoints';
 
 interface Camera {
   id: string;
@@ -105,7 +103,7 @@ const CameraFeed: React.FC<{
       try {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        const res = await fetch(`${GO2RTC()}/api/webrtc?src=${encodeURIComponent(streamName)}`, {
+        const res = await fetch(go2rtcUrl(`/api/webrtc?src=${encodeURIComponent(streamName)}`), {
           method: 'POST',
           body: offer.sdp,
         });
@@ -203,9 +201,9 @@ const LiveView: React.FC = () => {
   const fetchData = async () => {
     try {
       const [c, e, cfg] = await Promise.all([
-        fetch(`${API()}/cameras`).then(r => r.ok ? r.json() : []),
-        fetch(`${API()}/events?limit=20`).then(r => r.ok ? r.json() : []),
-        fetch(`${API()}/system/config`).then(r => r.ok ? r.json() : null),
+        fetch(apiUrl('/cameras')).then(r => r.ok ? r.json() : []),
+        fetch(apiUrl('/events?limit=20')).then(r => r.ok ? r.json() : []),
+        fetch(apiUrl('/system/config')).then(r => r.ok ? r.json() : null),
       ]);
       setCameras(c);
       setEvents(e);
@@ -226,7 +224,7 @@ const LiveView: React.FC = () => {
       const next: Record<string, RecordingFile[]> = {};
       await Promise.all(cameras.map(async cam => {
         try {
-          const res = await fetch(`${API()}/recordings-list?camera_id=${cam.id}`);
+          const res = await fetch(apiUrl(`/recordings-list?camera_id=${cam.id}`));
           next[cam.id] = res.ok ? (await res.json()).map(parseRecording).sort((a: RecordingFile, b: RecordingFile) => a.startTimestamp - b.startTimestamp) : [];
         } catch {
           next[cam.id] = [];
@@ -363,7 +361,7 @@ const LiveView: React.FC = () => {
                     <video
                       ref={el => { syncVideoRefs.current[cam.id] = el; }}
                       key={rec.url}
-                      src={`${API()}${rec.url}`}
+                      src={apiUrl(rec.url)}
                       autoPlay={!syncPaused}
                       muted
                       playsInline

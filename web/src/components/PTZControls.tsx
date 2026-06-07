@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Crosshair, ZoomIn, ZoomOut } from 'lucide-react';
+import { apiUrl } from '../lib/endpoints';
 
 interface PTZControlsProps {
   cameraId: string;
@@ -8,7 +9,7 @@ interface PTZControlsProps {
 export const PTZControls: React.FC<PTZControlsProps> = ({ cameraId }) => {
   const handlePTZ = async (action: string) => {
     try {
-      await fetch(`http://localhost:8000/cameras/${cameraId}/ptz/move`, {
+      await fetch(apiUrl(`/cameras/${cameraId}/ptz/move`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, speed: 0.5 })
@@ -20,7 +21,7 @@ export const PTZControls: React.FC<PTZControlsProps> = ({ cameraId }) => {
 
   const stopPTZ = async () => {
     try {
-      await fetch(`http://localhost:8000/cameras/${cameraId}/ptz/stop`, {
+      await fetch(apiUrl(`/cameras/${cameraId}/ptz/stop`), {
         method: 'POST'
       });
     } catch (e) {

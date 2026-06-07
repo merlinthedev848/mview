@@ -128,8 +128,12 @@ async def update_system_config(config: SystemConfigUpdate):
         
     settings.retention_days = config.retention_days
     for key, value in config.ai.model_dump().items():
-        setattr(settings, f"ai_{key}", value)
+        setting_name = f"ai_{key}"
+        if hasattr(settings, setting_name):
+            setattr(settings, setting_name, value)
     for key, value in config.network.model_dump().items():
-        setattr(settings, f"network_{key}", value)
+        setting_name = f"network_{key}"
+        if hasattr(settings, setting_name):
+            setattr(settings, setting_name, value)
 
     return {"status": "success", **config.model_dump()}

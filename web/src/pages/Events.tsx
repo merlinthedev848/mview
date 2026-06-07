@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Bell } from 'lucide-react';
-
-const API = () => `http://${window.location.hostname}:8000`;
+import { apiUrl } from '../lib/endpoints';
 
 const Events: React.FC = () => {
   const [events, setEvents] = useState<any[]>([]);
@@ -10,7 +9,7 @@ const Events: React.FC = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch(`${API()}/events?limit=200`);
+        const res = await fetch(apiUrl('/events?limit=200'));
         if (res.ok) setEvents(await res.json());
       } catch {}
       setLoading(false);
