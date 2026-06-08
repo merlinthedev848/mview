@@ -1,8 +1,6 @@
 services:
   go2rtc:
-    build:
-      context: ./vendor/go2rtc
-      dockerfile: docker/Dockerfile
+    image: alexxit/go2rtc:latest
     container_name: sentinel-go2rtc
     network_mode: host
     volumes:
