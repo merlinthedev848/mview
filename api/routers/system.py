@@ -80,26 +80,40 @@ async def get_system_health():
     """Retrieve CPU, RAM, and Disk health statistics."""
     cpu_percent = psutil.cpu_percent(interval=1)
     memory = psutil.virtual_memory()
+    net = psutil.net_io_counters()
     
     storage_path = os.getenv("STORAGE_PATH", "/mnt/storage/mview")
     try:
         total, used, free = shutil.disk_usage(storage_path)
     except FileNotFoundError:
         total, used, free = (0, 0, 0)
+    total_gb = round(total / (1024**3), 2)
+    used_gb = round(used / (1024**3), 2)
+    free_gb = round(free / (1024**3), 2)
 
     return {
         "status": "online",
         "cpu_usage_percent": cpu_percent,
         "memory_usage_percent": memory.percent,
         "memory_total_gb": round(memory.total / (1024**3), 2),
+        "network": {
+            "bytes_sent": net.bytes_sent,
+            "bytes_recv": net.bytes_recv,
+        },
         "storage": {
             "path": storage_path,
-            "total_gb": round(total / (1024**3), 2),
-            "used_gb": round(used / (1024**3), 2),
-            "free_gb": round(free / (1024**3), 2),
+            "total_gb": total_gb,
+            "used_gb": used_gb,
+            "free_gb": free_gb,
             "usage_percent": round((used / total) * 100, 2) if total > 0 else 0
         }
     }
+
+
+@router.get("/storage-report")
+async def get_storage_report():
+    from api.services.recorder import storage_report
+    return storage_report()
 
 
 @router.get("/config")

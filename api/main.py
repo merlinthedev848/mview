@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from contextlib import asynccontextmanager
 import os
 import logging
@@ -179,10 +179,48 @@ RECORDINGS_DIR = Path(os.environ.get("RECORDINGS_DIR", "/mnt/storage/mview/recor
 
 
 @app.get("/recordings/{camera_id}/{filename}")
-async def serve_recording(camera_id: str, filename: str):
+async def serve_recording(camera_id: str, filename: str, request: Request):
     fp = RECORDINGS_DIR / camera_id / filename
     if not fp.exists() or not fp.is_file():
         raise HTTPException(404, "Recording not found")
+    file_size = fp.stat().st_size
+    range_header = request.headers.get("range")
+    if range_header:
+        start = 0
+        end = file_size - 1
+        try:
+            requested = range_header.replace("bytes=", "", 1)
+            start_text, end_text = requested.split("-", 1)
+            if start_text:
+                start = int(start_text)
+            if end_text:
+                end = min(int(end_text), file_size - 1)
+        except ValueError:
+            raise HTTPException(416, "Invalid range")
+        if start > end or start >= file_size:
+            raise HTTPException(416, "Requested range not satisfiable")
+
+        def iter_file():
+            with open(fp, "rb") as fh:
+                fh.seek(start)
+                remaining = end - start + 1
+                while remaining > 0:
+                    chunk = fh.read(min(1024 * 1024, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    yield chunk
+
+        return StreamingResponse(
+            iter_file(),
+            status_code=206,
+            media_type="video/mp4",
+            headers={
+                "Accept-Ranges": "bytes",
+                "Content-Range": f"bytes {start}-{end}/{file_size}",
+                "Content-Length": str(end - start + 1),
+            },
+        )
     return FileResponse(str(fp), media_type="video/mp4",
                         headers={"Accept-Ranges": "bytes"})
 

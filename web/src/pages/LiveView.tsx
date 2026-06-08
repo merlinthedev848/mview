@@ -7,8 +7,6 @@ import {
   Focus,
   Maximize2,
   Mic,
-  Pause,
-  Play,
   Video,
   WifiOff,
 } from 'lucide-react';
@@ -96,11 +94,10 @@ const CameraFeed: React.FC<{
 
     const scheduleRetry = () => {
       if (retryTimer) return;
-      retryTimer = window.setTimeout(() => setRetryNonce(n => n + 1), 1500);
+      retryTimer = window.setTimeout(() => setRetryNonce(n => n + 1), 1000);
     };
 
     pc.addTransceiver('video', { direction: 'recvonly' });
-    pc.addTransceiver('audio', { direction: 'recvonly' });
 
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
@@ -127,7 +124,7 @@ const CameraFeed: React.FC<{
         await pc.setRemoteDescription({ type: 'answer', sdp: await res.text() });
         watchdog = window.setTimeout(() => {
           if (!videoRef.current?.srcObject) scheduleRetry();
-        }, 7000);
+        }, 3500);
       } catch (e) {
         console.error('[WebRTC]', cam.name, e);
         scheduleRetry();
@@ -223,12 +220,12 @@ const LiveView: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      const [c, e, cfg] = await Promise.all([
-        fetch(apiUrl('/cameras')).then(r => r.ok ? r.json() : []),
+      const c = await fetch(apiUrl('/cameras')).then(r => r.ok ? r.json() : []);
+      setCameras(c);
+      const [e, cfg] = await Promise.all([
         fetch(apiUrl('/events?limit=20')).then(r => r.ok ? r.json() : []),
         fetch(apiUrl('/system/config')).then(r => r.ok ? r.json() : null),
       ]);
-      setCameras(c);
       setEvents(e);
       const servers = cfg?.network?.ice_servers || [];
       setIceServers(servers.map((url: string) => ({ urls: url })));
@@ -444,36 +441,6 @@ const LiveView: React.FC = () => {
         </div>
       )}
 
-      <div className="bottom-bar">
-        <div className="live-toggle">
-          <button className={`live-btn${viewMode === 'live' ? ' active' : ''}`} onClick={() => setViewMode('live')}>Live</button>
-          <button className={`live-btn${viewMode === 'playback' ? ' active' : ''}`} onClick={() => setViewMode('playback')}>Playback</button>
-        </div>
-        <button className="cam-btn" style={{ width: 26, height: 26 }} onClick={toggleTransport}>
-          {(viewMode === 'playback' ? syncPaused : livePaused) ? <Play size={13} /> : <Pause size={13} />}
-        </button>
-        <div className="bottom-clock" style={{ marginLeft: 10 }}>
-          <div className="clock-time">{now.toLocaleTimeString('en-GB', { hour12: false })} UTC</div>
-          <div className="clock-date">{now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
-        </div>
-        <div style={{ fontSize: '0.74rem', color: 'var(--t2)', fontFamily: 'JetBrains Mono, monospace', marginLeft: 12 }}>
-          Bandwidth: 6.2 Mbps - Latency: 32ms - Codec: H.264
-        </div>
-        <div className="event-log">
-          <span className="event-log-label">Event Log</span>
-          <div className="event-rows">
-            {events.length === 0 ? (
-              <span style={{ fontSize: '0.7rem', color: 'var(--t3)' }}>No events yet</span>
-            ) : events.slice(0, 2).map((ev, i) => (
-              <div key={i} className="event-row">
-                <div className={`event-dot ${ev.object_class === 'person' ? 'person' : ev.object_class === 'car' ? 'vehicle' : 'other'}`} />
-                <span className="event-text">{ev.object_class || 'Event'} detected</span>
-                <span className="event-time">{new Date(ev.timestamp || ev.created_at || Date.now()).toLocaleTimeString('en-GB', { hour12: false })}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
     </div>
   );
 };

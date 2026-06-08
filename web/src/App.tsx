@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
 import { Video, PlaySquare, Bell, Settings as SettingsIcon, ShieldCheck, HardDrive, LogOut, Wifi } from 'lucide-react';
 
@@ -39,10 +39,13 @@ const Sidebar = ({ onLogout }: { onLogout: () => void }) => {
   const [cameras, setCameras] = useState<any[]>([]);
   const [events,  setEvents]  = useState<any[]>([]);
   const [storage, setStorage] = useState<any>(null);
+  const [systemStats, setSystemStats] = useState({ cpu: '--', up: '0.00', down: '0.00', latency: '--' });
+  const previousNetwork = useRef<{ sent: number; recv: number; timestamp: number } | null>(null);
 
   useEffect(() => {
     const load = async () => {
       try {
+        const started = performance.now();
         const [c, e, h] = await Promise.all([
           fetch(apiUrl('/cameras')).then(r => r.ok ? r.json() : []),
           fetch(apiUrl('/events?limit=100')).then(r => r.ok ? r.json() : []),
@@ -50,7 +53,27 @@ const Sidebar = ({ onLogout }: { onLogout: () => void }) => {
         ]);
         setCameras(c);
         setEvents(e);
-        if (h && h.storage) setStorage(h.storage);
+        if (h && h.storage) {
+          setStorage(h.storage);
+          const now = Date.now();
+          const previous = previousNetwork.current;
+          let up = 0;
+          let down = 0;
+          if (previous && h.network) {
+            const elapsed = Math.max((now - previous.timestamp) / 1000, 1);
+            up = Math.max(0, ((h.network.bytes_sent - previous.sent) * 8) / elapsed / 1_000_000);
+            down = Math.max(0, ((h.network.bytes_recv - previous.recv) * 8) / elapsed / 1_000_000);
+          }
+          if (h.network) {
+            previousNetwork.current = { sent: h.network.bytes_sent, recv: h.network.bytes_recv, timestamp: now };
+          }
+          setSystemStats({
+            cpu: typeof h.cpu_usage_percent === 'number' ? h.cpu_usage_percent.toFixed(1) : '--',
+            up: up.toFixed(2),
+            down: down.toFixed(2),
+            latency: `${Math.round(performance.now() - started)}`,
+          });
+        }
       } catch {}
     };
     load();
@@ -115,6 +138,13 @@ const Sidebar = ({ onLogout }: { onLogout: () => void }) => {
             <Wifi size={13} color="var(--t3)" />
             <span style={{ fontSize: '0.74rem', color: 'var(--t2)' }}>Network</span>
             <span style={{ marginLeft: 'auto', fontSize: '0.7rem', color: 'var(--green)' }}>OK</span>
+          </div>
+          <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr auto', rowGap: 4, columnGap: 8, fontSize: '0.66rem', color: 'var(--t3)', fontFamily: 'JetBrains Mono, monospace' }}>
+            <span>CPU</span><span style={{ color: 'var(--t2)' }}>{systemStats.cpu}%</span>
+            <span>Up</span><span style={{ color: 'var(--cyan)' }}>{systemStats.up} Mbps</span>
+            <span>Down</span><span style={{ color: 'var(--cyan)' }}>{systemStats.down} Mbps</span>
+            <span>Latency</span><span style={{ color: 'var(--t2)' }}>{systemStats.latency} ms</span>
+            <span>Codec</span><span style={{ color: 'var(--green)' }}>H.264</span>
           </div>
         </div>
       </nav>

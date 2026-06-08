@@ -264,6 +264,16 @@ const Playback: React.FC = () => {
   };
 
   // ── 4. Transport Control Handlers ──────────────────────────────────
+  useEffect(() => {
+    if (!buffering || !activeFile) return;
+    const timer = window.setTimeout(() => {
+      if (videoRef.current && videoRef.current.readyState < 2) {
+        handleRecordingError();
+      }
+    }, 10000);
+    return () => window.clearTimeout(timer);
+  }, [buffering, activeFile?.url]);
+
   const handlePlayPause = () => {
     if (!videoRef.current) return;
     if (videoRef.current.paused) {

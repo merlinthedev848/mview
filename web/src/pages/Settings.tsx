@@ -12,6 +12,7 @@ interface Camera {
   model?: string;
   resolution?: string;
   status: string;
+  enabled?: boolean;
   auto_adopted: boolean;
   config?: any;
   created_at: string;
@@ -25,6 +26,7 @@ interface ManualForm {
   onvif_password: string;
   rtsp_url_main: string;
   rtsp_url_sub: string;
+  enabled: boolean;
   record_substream: boolean;
 }
 
@@ -36,6 +38,7 @@ const emptyForm: ManualForm = {
   onvif_password: '',
   rtsp_url_main: '',
   rtsp_url_sub: '',
+  enabled: true,
   record_substream: false,
 };
 
@@ -71,6 +74,34 @@ interface TokenUser {
   username?: string;
   role?: string;
   permissions?: string[];
+}
+
+interface SystemHealth {
+  cpu_usage_percent?: number;
+  memory_usage_percent?: number;
+  memory_total_gb?: number;
+  storage?: {
+    total_gb: number;
+    used_gb: number;
+    free_gb: number;
+    usage_percent: number;
+  };
+}
+
+interface StorageReport {
+  segment_seconds: number;
+  record_substream_default: boolean;
+  total_gb: number;
+  estimated_gb_per_day: number;
+  cameras: Array<{
+    camera_id: string;
+    files: number;
+    total_gb: number;
+    last_24h_gb: number;
+    avg_segment_mb: number;
+    estimated_gb_per_day: number;
+    latest_recording?: string;
+  }>;
 }
 
 const defaultSystemConfig: SystemConfig = {
@@ -127,12 +158,15 @@ const Settings: React.FC = () => {
   const [newUser, setNewUser] = useState({ username: '', password: '', role: 'viewer', permissions: ['live'] as string[] });
   const [passwordForm, setPasswordForm] = useState({ current_password: '', new_password: '' });
   const [savingPassword, setSavingPassword] = useState(false);
+  const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
+  const [storageReport, setStorageReport] = useState<StorageReport | null>(null);
 
   const currentUser = getCurrentUser();
   const isAdmin = currentUser.role === 'admin';
 
   useEffect(() => {
     if (tab === 'ai' || tab === 'network' || tab === 'system') loadSystemConfig();
+    if (tab === 'system') loadSystemHealth();
     if (tab === 'users' && isAdmin) fetchUsers();
   }, [tab]);
 
@@ -175,6 +209,17 @@ const Settings: React.FC = () => {
       showToast('Network error while updating configuration.');
     }
     setSavingConfig(false);
+  };
+
+  const loadSystemHealth = async () => {
+    try {
+      const [healthRes, storageRes] = await Promise.all([
+        fetch(apiUrl('/system/health')),
+        fetch(apiUrl('/system/storage-report')),
+      ]);
+      if (healthRes.ok) setSystemHealth(await healthRes.json());
+      if (storageRes.ok) setStorageReport(await storageRes.json());
+    } catch {}
   };
 
   const fetchUsers = async () => {
@@ -329,6 +374,7 @@ const Settings: React.FC = () => {
         manufacturer: 'Manual',
         model: 'IP Camera',
         status: 'online',
+        enabled: manualForm.enabled,
         auto_adopted: false,
         config: { record_substream: manualForm.record_substream }
       };
@@ -376,6 +422,10 @@ const Settings: React.FC = () => {
     { id: 'system', label: 'System' },
     { id: 'users', label: 'Users & Security' },
   ];
+  const cameraNameById = Object.fromEntries(cameras.map(cam => [cam.id, cam.name]));
+  const estimatedDaysRemaining = storageReport?.estimated_gb_per_day && systemHealth?.storage?.free_gb
+    ? Math.floor(systemHealth.storage.free_gb / storageReport.estimated_gb_per_day)
+    : null;
 
   return (
     <div className="settings-page" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -467,6 +517,15 @@ const Settings: React.FC = () => {
                           onChange={e => setManualForm(f => ({ ...f, rtsp_url_sub: e.target.value }))} />
                       </div>
                       <div className="form-group" style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                        <input type="checkbox" id="cameraEnabled"
+                          checked={manualForm.enabled}
+                          onChange={e => setManualForm(f => ({ ...f, enabled: e.target.checked }))}
+                          style={{ width: 18, height: 18, accentColor: 'var(--cyan)' }} />
+                        <label htmlFor="cameraEnabled" className="form-label" style={{ margin: 0, cursor: 'pointer', fontSize: '0.85rem' }}>
+                          Recording Enabled
+                        </label>
+                      </div>
+                      <div className="form-group" style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
                         <input type="checkbox" id="recordSubstream"
                           checked={manualForm.record_substream}
                           onChange={e => setManualForm(f => ({ ...f, record_substream: e.target.checked }))}
@@ -506,7 +565,11 @@ const Settings: React.FC = () => {
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-1)' }}>{cam.name}</div>
                           <div style={{ fontSize: '0.72rem', color: 'var(--text-3)', marginTop: 2 }}>
-                            {[cam.resolution, cam.auto_adopted ? 'Auto-adopted' : 'Manual'].filter(Boolean).join(' / ')}
+                            {[
+                              cam.resolution,
+                              cam.enabled === false ? 'Recording disabled' : cam.config?.record_substream ? 'Recording substream' : 'Recording main stream',
+                              cam.auto_adopted ? 'Auto-adopted' : 'Manual'
+                            ].filter(Boolean).join(' / ')}
                           </div>
                         </div>
                         <div style={{ display: 'flex', gap: 6 }}>
@@ -544,6 +607,7 @@ const Settings: React.FC = () => {
                                 onvif_password: '',
                                 rtsp_url_main: cam.rtsp_url_main || '',
                                 rtsp_url_sub: cam.rtsp_url_sub || '',
+                                enabled: cam.enabled !== false,
                                 record_substream: cam.config?.record_substream || false
                               });
                               setEditingId(cam.id);

@@ -3,7 +3,7 @@ Recorder Service — FFmpeg-based 24/7 recording engine.
 
 For each enabled camera, spawns an ffmpeg process that:
   - Reads the RTSP stream (video + audio)
-  - Segments recordings into 1-hour MP4 files under /recordings/{camera_id}/
+  - Segments recordings into short MP4 files under /recordings/{camera_id}/
   - Auto-restarts on stream drop (with backoff)
 """
 
@@ -19,6 +19,9 @@ logger = logging.getLogger("mView-Recorder")
 RECORDINGS_BASE = Path(os.environ.get("RECORDINGS_DIR", "/mnt/storage/mview/recordings"))
 SEGMENT_DURATION = int(os.environ.get("SEGMENT_SECONDS") or (int(os.environ.get("SEGMENT_MINUTES", "1")) * 60))
 RECORD_SUBSTREAM_DEFAULT = os.environ.get("RECORD_SUBSTREAM_DEFAULT", "false").lower() in {"1", "true", "yes", "on"}
+RECORD_VIDEO_CODEC = os.environ.get("RECORD_VIDEO_CODEC", "copy").lower()
+RECORD_VIDEO_CRF = os.environ.get("RECORD_VIDEO_CRF", "30")
+RECORD_VIDEO_PRESET = os.environ.get("RECORD_VIDEO_PRESET", "veryfast")
 
 
 class CameraRecorder:
@@ -67,6 +70,7 @@ class CameraRecorder:
                 "ffprobe",
                 "-v", "error",
                 "-rtsp_transport", "tcp",
+                "-stimeout", "8000000",
                 "-show_entries", "stream=codec_type,codec_name",
                 "-of", "json",
                 self.rtsp_url
@@ -76,7 +80,7 @@ class CameraRecorder:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, _ = await asyncio.wait_for(probe_proc.communicate(), timeout=3.0)
+            stdout, _ = await asyncio.wait_for(probe_proc.communicate(), timeout=8.0)
             if probe_proc.returncode == 0:
                 import json
                 data = json.loads(stdout.decode())
@@ -100,6 +104,17 @@ class CameraRecorder:
             "-c:v", "copy",                    # Copy video stream — zero transcoding, zero quality loss
         ]
 
+        if RECORD_VIDEO_CODEC == "libx264":
+            video_codec_index = cmd.index("-c:v")
+            cmd[video_codec_index:video_codec_index + 2] = [
+                "-c:v", "libx264",
+                "-preset", RECORD_VIDEO_PRESET,
+                "-crf", RECORD_VIDEO_CRF,
+                "-pix_fmt", "yuv420p",
+                "-profile:v", "main",
+                "-g", "50",
+            ]
+
         if has_audio:
             cmd.extend([
                 "-map", "0:a",                 # Map the audio stream
@@ -114,6 +129,7 @@ class CameraRecorder:
             "-f", "segment",
             "-segment_time", str(SEGMENT_DURATION),
             "-segment_format", "mp4",
+            "-segment_format_options", "movflags=+faststart",
             "-reset_timestamps", "1",
             "-strftime", "1",
             "-movflags", "+faststart",         # Web-optimised MP4 — can play before fully downloaded
@@ -264,6 +280,56 @@ def list_recordings(camera_id: str | None = None) -> list[dict]:
                 "url": f"/recordings/{cam_dir.name}/{f.name}",
             })
     return results
+
+
+def storage_report() -> dict:
+    """Return per-camera recording storage usage and simple retention estimates."""
+    base = RECORDINGS_BASE
+    now = datetime.now()
+    report = {
+        "segment_seconds": SEGMENT_DURATION,
+        "record_substream_default": RECORD_SUBSTREAM_DEFAULT,
+        "cameras": [],
+        "total_gb": 0.0,
+        "estimated_gb_per_day": 0.0,
+    }
+    if not base.exists():
+        return report
+
+    total_bytes = 0
+    total_day_bytes = 0
+    for cam_dir in sorted([d for d in base.iterdir() if d.is_dir()]):
+        files = []
+        cam_bytes = 0
+        day_bytes = 0
+        latest = None
+        for f in cam_dir.glob("*.mp4"):
+            try:
+                stat = f.stat()
+            except OSError:
+                continue
+            mtime = datetime.fromtimestamp(stat.st_mtime)
+            cam_bytes += stat.st_size
+            if (now - mtime).total_seconds() <= 24 * 3600:
+                day_bytes += stat.st_size
+            latest = max(latest, mtime) if latest else mtime
+            files.append(stat.st_size)
+
+        total_bytes += cam_bytes
+        total_day_bytes += day_bytes
+        report["cameras"].append({
+            "camera_id": cam_dir.name,
+            "files": len(files),
+            "total_gb": round(cam_bytes / 1_073_741_824, 2),
+            "last_24h_gb": round(day_bytes / 1_073_741_824, 2),
+            "avg_segment_mb": round((sum(files) / len(files) / 1_048_576) if files else 0, 2),
+            "estimated_gb_per_day": round(day_bytes / 1_073_741_824, 2),
+            "latest_recording": latest.isoformat() if latest else None,
+        })
+
+    report["total_gb"] = round(total_bytes / 1_073_741_824, 2)
+    report["estimated_gb_per_day"] = round(total_day_bytes / 1_073_741_824, 2)
+    return report
 
 
 def purge_old_recordings(retention_days: int):
