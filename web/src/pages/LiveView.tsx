@@ -71,7 +71,7 @@ const inputTime = (date: Date) => {
   return `${h}:${m}`;
 };
 
-const CameraFeed: React.FC<{
+const CameraFeedComponent: React.FC<{
   cam: Camera;
   iceServers: RTCIceServer[];
   analytics?: boolean;
@@ -89,19 +89,30 @@ const CameraFeed: React.FC<{
 
     const pc = new RTCPeerConnection({ iceServers });
     let retryTimer: number | undefined;
+    let disconnectTimer: number | undefined;
     let watchdog: number | undefined;
     setConnected(false);
 
     const scheduleRetry = () => {
       if (retryTimer) return;
-      retryTimer = window.setTimeout(() => setRetryNonce(n => n + 1), 1000);
+      retryTimer = window.setTimeout(() => setRetryNonce(n => n + 1), 5000);
     };
 
     pc.addTransceiver('video', { direction: 'recvonly' });
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+      if (pc.connectionState === 'connected') {
+        if (disconnectTimer) window.clearTimeout(disconnectTimer);
+        setConnected(true);
+      }
+      if (pc.connectionState === 'failed') {
         scheduleRetry();
+      }
+      if (pc.connectionState === 'disconnected') {
+        if (disconnectTimer) return;
+        disconnectTimer = window.setTimeout(() => {
+          if (pc.connectionState === 'disconnected') scheduleRetry();
+        }, 8000);
       }
     };
 
@@ -124,7 +135,7 @@ const CameraFeed: React.FC<{
         await pc.setRemoteDescription({ type: 'answer', sdp: await res.text() });
         watchdog = window.setTimeout(() => {
           if (!videoRef.current?.srcObject) scheduleRetry();
-        }, 3500);
+        }, 8000);
       } catch (e) {
         console.error('[WebRTC]', cam.name, e);
         scheduleRetry();
@@ -133,6 +144,7 @@ const CameraFeed: React.FC<{
 
     return () => {
       if (retryTimer) window.clearTimeout(retryTimer);
+      if (disconnectTimer) window.clearTimeout(disconnectTimer);
       if (watchdog) window.clearTimeout(watchdog);
       pc.close();
       setConnected(false);
@@ -218,23 +230,25 @@ const LiveView: React.FC = () => {
     return () => clearInterval(tick);
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = async (loadConfig = false) => {
     try {
       const c = await fetch(apiUrl('/cameras')).then(r => r.ok ? r.json() : []);
       setCameras(c);
       const [e, cfg] = await Promise.all([
         fetch(apiUrl('/events?limit=20')).then(r => r.ok ? r.json() : []),
-        fetch(apiUrl('/system/config')).then(r => r.ok ? r.json() : null),
+        loadConfig ? fetch(apiUrl('/system/config')).then(r => r.ok ? r.json() : null) : Promise.resolve(null),
       ]);
       setEvents(e);
-      const servers = cfg?.network?.ice_servers || [];
-      setIceServers(servers.map((url: string) => ({ urls: url })));
+      if (cfg) {
+        const servers = cfg?.network?.ice_servers || [];
+        setIceServers(servers.map((url: string) => ({ urls: url })));
+      }
     } catch {}
   };
 
   useEffect(() => {
-    fetchData();
-    const t = setInterval(fetchData, 5000);
+    fetchData(true);
+    const t = setInterval(() => fetchData(false), 15000);
     return () => clearInterval(t);
   }, []);
 
@@ -444,5 +458,17 @@ const LiveView: React.FC = () => {
     </div>
   );
 };
+
+const CameraFeed = React.memo(CameraFeedComponent, (prev, next) => (
+  prev.cam.id === next.cam.id &&
+  prev.cam.status === next.cam.status &&
+  prev.cam.rtsp_url_main === next.cam.rtsp_url_main &&
+  prev.cam.rtsp_url_sub === next.cam.rtsp_url_sub &&
+  prev.cam.has_motion === next.cam.has_motion &&
+  prev.analytics === next.analytics &&
+  prev.maximized === next.maximized &&
+  prev.paused === next.paused &&
+  JSON.stringify(prev.iceServers) === JSON.stringify(next.iceServers)
+));
 
 export default LiveView;

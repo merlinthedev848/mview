@@ -39,6 +39,7 @@ const Sidebar = ({ onLogout }: { onLogout: () => void }) => {
   const [cameras, setCameras] = useState<any[]>([]);
   const [events,  setEvents]  = useState<any[]>([]);
   const [storage, setStorage] = useState<any>(null);
+  const [recordingStorage, setRecordingStorage] = useState<any>(null);
   const [systemStats, setSystemStats] = useState({ cpu: '--', up: '0.00', down: '0.00', latency: '--' });
   const previousNetwork = useRef<{ sent: number; recv: number; timestamp: number } | null>(null);
 
@@ -46,13 +47,15 @@ const Sidebar = ({ onLogout }: { onLogout: () => void }) => {
     const load = async () => {
       try {
         const started = performance.now();
-        const [c, e, h] = await Promise.all([
+        const [c, e, h, s] = await Promise.all([
           fetch(apiUrl('/cameras')).then(r => r.ok ? r.json() : []),
-          fetch(apiUrl('/events?limit=100')).then(r => r.ok ? r.json() : []),
+          fetch(apiUrl('/events?limit=20')).then(r => r.ok ? r.json() : []),
           fetch(apiUrl('/system/health')).then(r => r.ok ? r.json() : null),
+          fetch(apiUrl('/system/storage-report')).then(r => r.ok ? r.json() : null),
         ]);
         setCameras(c);
         setEvents(e);
+        if (s) setRecordingStorage(s);
         if (h && h.storage) {
           setStorage(h.storage);
           const now = Date.now();
@@ -77,7 +80,7 @@ const Sidebar = ({ onLogout }: { onLogout: () => void }) => {
       } catch {}
     };
     load();
-    const t = setInterval(load, 10000);
+    const t = setInterval(load, 15000);
     return () => clearInterval(t);
   }, []);
 
@@ -162,7 +165,9 @@ const Sidebar = ({ onLogout }: { onLogout: () => void }) => {
         </div>
         {storage && (
           <div style={{ fontSize: '0.65rem', color: 'var(--t3)', textAlign: 'right', marginTop: '-4px', fontFamily: 'monospace' }}>
-            {storage.used_gb} GB / {storage.total_gb} GB
+            {recordingStorage ? `${recordingStorage.total_gb} GB archive` : `${storage.used_gb} GB used`}
+            <br />
+            {storage.used_gb} GB / {storage.total_gb} GB disk
           </div>
         )}
 
