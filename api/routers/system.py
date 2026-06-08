@@ -78,7 +78,7 @@ def _compose_config(data: dict) -> SystemConfigUpdate:
 @router.get("/health")
 async def get_system_health():
     """Retrieve CPU, RAM, and Disk health statistics."""
-    cpu_percent = psutil.cpu_percent(interval=1)
+    cpu_percent = psutil.cpu_percent(interval=None)
     memory = psutil.virtual_memory()
     net = psutil.net_io_counters()
     
