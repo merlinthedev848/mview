@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:labs
+# syntax=docker/dockerfile:1.7
 
 # 0. Prepare images
 ARG PYTHON_VERSION="3.13"
