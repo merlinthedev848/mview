@@ -332,6 +332,33 @@ def storage_report() -> dict:
     return report
 
 
+def purge_all_recordings() -> dict:
+    """Delete every recording segment file from the configured recording store."""
+    purged_count = 0
+    purged_bytes = 0
+
+    if not RECORDINGS_BASE.exists():
+        return {"deleted_files": 0, "deleted_gb": 0.0}
+
+    for cam_dir in RECORDINGS_BASE.iterdir():
+        if not cam_dir.is_dir():
+            continue
+        for f in cam_dir.glob("*.mp4"):
+            try:
+                file_size = f.stat().st_size
+                f.unlink()
+                purged_count += 1
+                purged_bytes += file_size
+            except Exception as e:
+                logger.error(f"Error purging recording {f}: {e}")
+
+    logger.warning(f"Manual recording purge deleted {purged_count} files ({round(purged_bytes / 1_073_741_824, 2)} GB)")
+    return {
+        "deleted_files": purged_count,
+        "deleted_gb": round(purged_bytes / 1_073_741_824, 2),
+    }
+
+
 def purge_old_recordings(retention_days: int):
     """Delete recording segment files older than retention_days."""
     if retention_days <= 0:

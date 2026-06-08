@@ -18,6 +18,23 @@ interface Camera {
   created_at: string;
 }
 
+interface ZonePoint {
+  x: number;
+  y: number;
+}
+
+interface DetectionZone {
+  id: string;
+  name: string;
+  enabled: boolean;
+  points: ZonePoint[];
+  objects: string[];
+  min_confidence: number;
+  notify: boolean;
+  cooldown_seconds: number;
+  schedule: string;
+}
+
 interface ManualForm {
   name: string;
   ip: string;
@@ -28,6 +45,7 @@ interface ManualForm {
   rtsp_url_sub: string;
   enabled: boolean;
   record_substream: boolean;
+  zones: DetectionZone[];
 }
 
 const emptyForm: ManualForm = {
@@ -40,6 +58,7 @@ const emptyForm: ManualForm = {
   rtsp_url_sub: '',
   enabled: true,
   record_substream: false,
+  zones: [],
 };
 
 const PASSWORD_MASK = '********';
@@ -55,6 +74,37 @@ const restoreMaskedRtspPassword = (value: string, original: string) => {
   const originalPassword = originalMatch?.[1];
   return originalPassword ? value.replace(PASSWORD_MASK, originalPassword) : value;
 };
+
+const detectionObjects = ['person', 'car', 'truck', 'bus', 'motorcycle'];
+
+const createDetectionZone = (): DetectionZone => ({
+  id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`,
+  name: 'New Zone',
+  enabled: true,
+  points: [
+    { x: 0.1, y: 0.1 },
+    { x: 0.9, y: 0.1 },
+    { x: 0.9, y: 0.9 },
+    { x: 0.1, y: 0.9 },
+  ],
+  objects: ['person'],
+  min_confidence: 0.6,
+  notify: true,
+  cooldown_seconds: 120,
+  schedule: 'always',
+});
+
+const pointsToText = (points: ZonePoint[]) => points.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join('\n');
+
+const textToPoints = (value: string): ZonePoint[] => value
+  .split('\n')
+  .map(line => line.trim())
+  .filter(Boolean)
+  .map(line => {
+    const [x, y] = line.split(',').map(v => Math.max(0, Math.min(1, parseFloat(v.trim()) || 0)));
+    return { x, y };
+  })
+  .filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
 
 interface SystemConfig {
   retention_days: number;
@@ -175,6 +225,7 @@ const Settings: React.FC = () => {
   const [savingPassword, setSavingPassword] = useState(false);
   const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
   const [storageReport, setStorageReport] = useState<StorageReport | null>(null);
+  const [purgingRecordings, setPurgingRecordings] = useState(false);
 
   const currentUser = getCurrentUser();
   const isAdmin = currentUser.role === 'admin';
@@ -235,6 +286,27 @@ const Settings: React.FC = () => {
       if (healthRes.ok) setSystemHealth(await healthRes.json());
       if (storageRes.ok) setStorageReport(await storageRes.json());
     } catch {}
+  };
+
+  const purgeRecordings = async () => {
+    const usage = storageReport?.total_gb ? `${storageReport.total_gb} GB` : 'all stored video';
+    if (!window.confirm(`Delete ${usage} of recordings? This cannot be undone.`)) return;
+    setPurgingRecordings(true);
+    try {
+      const res = await fetch(apiUrl('/system/recordings/purge'), { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.storage_report) setStorageReport(data.storage_report);
+        await loadSystemHealth();
+        showToast(`Purged ${data.deleted_gb || 0} GB across ${data.deleted_files || 0} files.`);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast(err.detail || 'Failed to purge recordings.');
+      }
+    } catch {
+      showToast('Network error while purging recordings.');
+    }
+    setPurgingRecordings(false);
   };
 
   const fetchUsers = async () => {
@@ -391,7 +463,7 @@ const Settings: React.FC = () => {
         status: 'online',
         enabled: manualForm.enabled,
         auto_adopted: false,
-        config: { record_substream: manualForm.record_substream }
+        config: { record_substream: manualForm.record_substream, zones: manualForm.zones }
       };
       
       const method = editingId ? 'PATCH' : 'POST';
@@ -417,6 +489,27 @@ const Settings: React.FC = () => {
       setSaveError('Network error.');
     }
     setSavingManual(false);
+  };
+
+  const updateZone = (zoneId: string, patch: Partial<DetectionZone>) => {
+    setManualForm(form => ({
+      ...form,
+      zones: form.zones.map(zone => zone.id === zoneId ? { ...zone, ...patch } : zone)
+    }));
+  };
+
+  const toggleZoneObject = (zoneId: string, objectName: string) => {
+    setManualForm(form => ({
+      ...form,
+      zones: form.zones.map(zone => {
+        if (zone.id !== zoneId) return zone;
+        const selected = zone.objects.includes(objectName);
+        return {
+          ...zone,
+          objects: selected ? zone.objects.filter(v => v !== objectName) : [...zone.objects, objectName]
+        };
+      })
+    }));
   };
 
   // ── Delete ──────────────────────────────────────────────────────
@@ -551,6 +644,70 @@ const Settings: React.FC = () => {
                           Record Substream (Low Disk Space Mode)
                         </label>
                       </div>
+                      <div className="form-group" style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', paddingTop: 14, marginTop: 6 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                          <div>
+                            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-1)' }}>AI Zones & Alerts</div>
+                            <div style={{ fontSize: '0.68rem', color: 'var(--text-3)', marginTop: 3 }}>Normalized points use 0.00 to 1.00 across the camera frame.</div>
+                          </div>
+                          <button className="btn btn-ghost" style={{ padding: '7px 12px' }} onClick={() => setManualForm(f => ({ ...f, zones: [...f.zones, createDetectionZone()] }))}>
+                            <Plus size={14} /> Add Zone
+                          </button>
+                        </div>
+                        {manualForm.zones.length === 0 ? (
+                          <div style={{ fontSize: '0.76rem', color: 'var(--text-3)', border: '1px dashed var(--border)', borderRadius: 8, padding: 12 }}>
+                            No AI zones configured. Without zones, events are accepted from the full frame.
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            {manualForm.zones.map(zone => (
+                              <div key={zone.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, background: 'rgba(255,255,255,0.02)' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 130px auto', gap: 10, alignItems: 'end' }}>
+                                  <div className="form-group">
+                                    <label className="form-label">Zone Name</label>
+                                    <input className="form-input" value={zone.name} onChange={e => updateZone(zone.id, { name: e.target.value })} />
+                                  </div>
+                                  <div className="form-group">
+                                    <label className="form-label">Min Confidence</label>
+                                    <input className="form-input" type="number" min="0" max="100" value={Math.round(zone.min_confidence * 100)}
+                                      onChange={e => updateZone(zone.id, { min_confidence: Math.max(0, Math.min(1, (parseInt(e.target.value) || 0) / 100)) })} />
+                                  </div>
+                                  <div className="form-group">
+                                    <label className="form-label">Cooldown Sec</label>
+                                    <input className="form-input" type="number" min="0" value={zone.cooldown_seconds}
+                                      onChange={e => updateZone(zone.id, { cooldown_seconds: parseInt(e.target.value) || 0 })} />
+                                  </div>
+                                  <button className="btn btn-danger" style={{ padding: '9px 12px' }} onClick={() => setManualForm(f => ({ ...f, zones: f.zones.filter(z => z.id !== zone.id) }))}>
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginTop: 10 }}>
+                                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                                    <input type="checkbox" checked={zone.enabled} onChange={e => updateZone(zone.id, { enabled: e.target.checked })} style={{ width: 16, height: 16, accentColor: 'var(--cyan)' }} />
+                                    Enabled
+                                  </label>
+                                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                                    <input type="checkbox" checked={zone.notify} onChange={e => updateZone(zone.id, { notify: e.target.checked })} style={{ width: 16, height: 16, accentColor: 'var(--cyan)' }} />
+                                    Notify
+                                  </label>
+                                  {detectionObjects.map(objectName => (
+                                    <label key={objectName} className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0, textTransform: 'capitalize' }}>
+                                      <input type="checkbox" checked={zone.objects.includes(objectName)} onChange={() => toggleZoneObject(zone.id, objectName)} style={{ width: 16, height: 16, accentColor: 'var(--cyan)' }} />
+                                      {objectName}
+                                    </label>
+                                  ))}
+                                </div>
+                                <div className="form-group" style={{ marginTop: 10 }}>
+                                  <label className="form-label">Zone Points</label>
+                                  <textarea className="form-input" rows={3} value={pointsToText(zone.points)}
+                                    onChange={e => updateZone(zone.id, { points: textToPoints(e.target.value) })}
+                                    style={{ resize: 'vertical', fontFamily: 'JetBrains Mono' }} />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     {saveError && (
                       <div style={{ marginTop: 10, color: 'var(--red)', fontSize: '0.8rem' }}>⚠ {saveError}</div>
@@ -625,7 +782,8 @@ const Settings: React.FC = () => {
                                 rtsp_url_main: maskRtspPassword(cam.rtsp_url_main || ''),
                                 rtsp_url_sub: maskRtspPassword(cam.rtsp_url_sub || ''),
                                 enabled: cam.enabled !== false,
-                                record_substream: cam.config?.record_substream || false
+                                record_substream: cam.config?.record_substream || false,
+                                zones: Array.isArray(cam.config?.zones) ? cam.config.zones : []
                               });
                               setOriginalRtsp({ main: cam.rtsp_url_main || '', sub: cam.rtsp_url_sub || '' });
                               setEditingId(cam.id);
@@ -942,6 +1100,20 @@ const Settings: React.FC = () => {
                       </div>
                       <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: 4 }}>
                         Recorded video files older than this will be deleted automatically to save space. Set to 0 to disable auto-purge.
+                      </div>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Development Cleanup</label>
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <button className="btn btn-danger" onClick={purgeRecordings} disabled={purgingRecordings}>
+                          {purgingRecordings ? 'Purging...' : <><Trash2 size={14} /> Purge All Recordings</>}
+                        </button>
+                        <span style={{ color: 'var(--text-3)', fontSize: '0.72rem' }}>
+                          Current archive: {storageReport ? `${storageReport.total_gb} GB` : 'loading...'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: 4 }}>
+                        Deletes all MP4 recording segments from disk. Camera settings and users are not changed.
                       </div>
                     </div>
                   </div>

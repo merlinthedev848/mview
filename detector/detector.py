@@ -58,6 +58,8 @@ class DetectorNode:
             if frame_count % 6 != 0:
                 continue
 
+            frame_h, frame_w = frame.shape[:2]
+
             # Run YOLO inference
             results = self.model(frame, verbose=False, classes=[0, 2, 3, 5, 7]) # person, car, motorcycle, bus, truck
 
@@ -91,15 +93,21 @@ class DetectorNode:
                         "class": class_name,
                         "confidence": conf,
                         "bbox": [x1, y1, x2, y2],
+                        "bbox_norm": [
+                            max(0, min(1, x1 / frame_w)),
+                            max(0, min(1, y1 / frame_h)),
+                            max(0, min(1, x2 / frame_w)),
+                            max(0, min(1, y2 / frame_h)),
+                        ],
                         "embedding": embedding_list
                     })
 
             if detections:
-                self.publish_event(detections)
+                self.publish_event(detections, frame_w, frame_h)
 
         cap.release()
 
-    def publish_event(self, detections):
+    def publish_event(self, detections, frame_w, frame_h):
         now = time.time()
         if now - self.last_event_time < self.cooldown:
             return
@@ -108,6 +116,7 @@ class DetectorNode:
         payload = {
             "camera_id": CAMERA_ID,
             "timestamp": now,
+            "frame": {"width": frame_w, "height": frame_h},
             "objects": detections
         }
         topic = f"sentinel/events/{CAMERA_ID}"

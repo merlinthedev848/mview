@@ -116,6 +116,13 @@ async def get_storage_report():
     return storage_report()
 
 
+@router.post("/recordings/purge")
+async def purge_recordings():
+    from api.services.recorder import purge_all_recordings, storage_report
+    result = purge_all_recordings()
+    return {"status": "purged", **result, "storage_report": storage_report()}
+
+
 @router.get("/config")
 async def get_system_config():
     """Retrieve system configuration settings."""
