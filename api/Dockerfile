@@ -1,13 +1,3 @@
-# Stage 1: Build React frontend
-FROM node:20-alpine AS frontend-builder
-WORKDIR /app/web
-COPY web/package*.json ./
-# Use npm install (not ci) — works even without a lockfile
-RUN npm install
-COPY web/ ./
-RUN npm run build && echo "=== Frontend build complete ==" && ls -la dist/
-
-# Stage 2: Python API + ffmpeg recorder
 FROM python:3.11-slim
 WORKDIR /app
 
@@ -23,6 +13,6 @@ COPY api/requirements.txt ./api/
 RUN pip install --no-cache-dir -r api/requirements.txt
 
 COPY api /app/api
-COPY --from=frontend-builder /app/web/dist /app/web/dist
+COPY web/dist /app/web/dist
 
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
