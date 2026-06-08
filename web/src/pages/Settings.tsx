@@ -42,6 +42,20 @@ const emptyForm: ManualForm = {
   record_substream: false,
 };
 
+const PASSWORD_MASK = '********';
+
+const maskRtspPassword = (url: string) => {
+  if (!url) return '';
+  return url.replace(/(rtsp:\/\/[^:\s/@]+:)([^@\s]+)(@)/i, `$1${PASSWORD_MASK}$3`);
+};
+
+const restoreMaskedRtspPassword = (value: string, original: string) => {
+  if (!value.includes(PASSWORD_MASK) || !original) return value;
+  const originalMatch = original.match(/rtsp:\/\/[^:\s/@]+:([^@\s]+)@/i);
+  const originalPassword = originalMatch?.[1];
+  return originalPassword ? value.replace(PASSWORD_MASK, originalPassword) : value;
+};
+
 interface SystemConfig {
   retention_days: number;
   ai: {
@@ -144,6 +158,7 @@ const Settings: React.FC = () => {
   const [discoveryError, setDiscoveryError] = useState('');
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualForm, setManualForm] = useState<ManualForm>(emptyForm);
+  const [originalRtsp, setOriginalRtsp] = useState({ main: '', sub: '' });
   const [savingManual, setSavingManual] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [adopting, setAdopting] = useState<string | null>(null);
@@ -366,8 +381,8 @@ const Settings: React.FC = () => {
     try {
       const body: any = {
         name: manualForm.name.trim(),
-        rtsp_url_main: manualForm.rtsp_url_main.trim() || `rtsp://${manualForm.onvif_username}:${manualForm.onvif_password}@${manualForm.ip.trim()}:554/stream1`,
-        rtsp_url_sub: manualForm.rtsp_url_sub.trim() || undefined,
+        rtsp_url_main: restoreMaskedRtspPassword(manualForm.rtsp_url_main.trim(), originalRtsp.main) || `rtsp://${manualForm.onvif_username}:${manualForm.onvif_password}@${manualForm.ip.trim()}:554/stream1`,
+        rtsp_url_sub: restoreMaskedRtspPassword(manualForm.rtsp_url_sub.trim(), originalRtsp.sub) || undefined,
         onvif_endpoint: manualForm.ip ? `http://${manualForm.ip.trim()}:${manualForm.port}/onvif/device_service` : undefined,
         onvif_username: manualForm.onvif_username,
         onvif_password: manualForm.onvif_password,
@@ -389,6 +404,7 @@ const Settings: React.FC = () => {
       });
       if (res.ok) {
         setManualForm(emptyForm);
+        setOriginalRtsp({ main: '', sub: '' });
         setShowManualForm(false);
         setEditingId(null);
         await fetchCameras();
@@ -462,6 +478,7 @@ const Settings: React.FC = () => {
                     <button className="btn btn-primary" onClick={() => {
                       setEditingId(null);
                       setManualForm(emptyForm);
+                      setOriginalRtsp({ main: '', sub: '' });
                       setSaveError('');
                       setShowManualForm(true);
                     }}>
@@ -504,14 +521,14 @@ const Settings: React.FC = () => {
                       </div>
                       <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                         <label className="form-label">RTSP Main Stream URL (optional, auto-built from IP if empty)</label>
-                        <input className="form-input" type="password" autoComplete="off" spellCheck={false}
+                        <input className="form-input" type="text" autoComplete="off" spellCheck={false}
                           placeholder="rtsp://username:password@camera-ip:554/stream1"
                           value={manualForm.rtsp_url_main}
                           onChange={e => setManualForm(f => ({ ...f, rtsp_url_main: e.target.value }))} />
                       </div>
                       <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                         <label className="form-label">RTSP Sub Stream URL (optional)</label>
-                        <input className="form-input" type="password" autoComplete="off" spellCheck={false}
+                        <input className="form-input" type="text" autoComplete="off" spellCheck={false}
                           placeholder="rtsp://username:password@camera-ip:554/stream2"
                           value={manualForm.rtsp_url_sub}
                           onChange={e => setManualForm(f => ({ ...f, rtsp_url_sub: e.target.value }))} />
@@ -542,7 +559,7 @@ const Settings: React.FC = () => {
                       <button className="btn btn-primary" onClick={addManually} disabled={savingManual}>
                         {savingManual ? <><div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Saving…</> : <><CheckCircle size={15} /> Save Camera</>}
                       </button>
-                      <button className="btn btn-ghost" onClick={() => { setShowManualForm(false); setSaveError(''); setEditingId(null); setManualForm(emptyForm); }}>
+                      <button className="btn btn-ghost" onClick={() => { setShowManualForm(false); setSaveError(''); setEditingId(null); setOriginalRtsp({ main: '', sub: '' }); setManualForm(emptyForm); }}>
                         Cancel
                       </button>
                     </div>
@@ -605,11 +622,12 @@ const Settings: React.FC = () => {
                                 port,
                                 onvif_username: '',
                                 onvif_password: '',
-                                rtsp_url_main: cam.rtsp_url_main || '',
-                                rtsp_url_sub: cam.rtsp_url_sub || '',
+                                rtsp_url_main: maskRtspPassword(cam.rtsp_url_main || ''),
+                                rtsp_url_sub: maskRtspPassword(cam.rtsp_url_sub || ''),
                                 enabled: cam.enabled !== false,
                                 record_substream: cam.config?.record_substream || false
                               });
+                              setOriginalRtsp({ main: cam.rtsp_url_main || '', sub: cam.rtsp_url_sub || '' });
                               setEditingId(cam.id);
                               setShowManualForm(true);
                               // Scroll to top
