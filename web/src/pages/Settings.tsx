@@ -572,7 +572,7 @@ const Settings: React.FC = () => {
     }));
   };
 
-  const pointFromPointer = (event: React.PointerEvent<SVGSVGElement>): ZonePoint => {
+  const pointFromPointer = (event: React.PointerEvent<SVGSVGElement> | React.MouseEvent<SVGSVGElement>): ZonePoint => {
     const rect = event.currentTarget.getBoundingClientRect();
     return {
       x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
