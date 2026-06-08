@@ -1,4 +1,7 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List
@@ -66,6 +69,49 @@ async def delete_camera(camera_id: str, db: AsyncSession = Depends(get_db)):
     await db.commit()
     await _refresh_recorder(db)
     return {"status": "deleted"}
+
+
+@router.get("/{camera_id}/snapshot")
+async def get_camera_snapshot(camera_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Camera).where(Camera.id == camera_id))
+    cam = result.scalar_one_or_none()
+    if not cam:
+        raise HTTPException(404, "Camera not found")
+
+    rtsp_url = cam.rtsp_url_sub or cam.rtsp_url_main
+    if not rtsp_url:
+        raise HTTPException(400, "Camera has no RTSP stream configured")
+
+    cmd = [
+        "ffmpeg",
+        "-loglevel", "error",
+        "-rtsp_transport", "tcp",
+        "-i", rtsp_url,
+        "-frames:v", "1",
+        "-q:v", "4",
+        "-f", "image2pipe",
+        "-vcodec", "mjpeg",
+        "-",
+    ]
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=8.0)
+    except asyncio.TimeoutError:
+        if "proc" in locals():
+            proc.kill()
+        raise HTTPException(504, "Snapshot timed out")
+    except FileNotFoundError:
+        raise HTTPException(500, "ffmpeg is not available in the API container")
+
+    if proc.returncode != 0 or not stdout:
+        detail = stderr.decode(errors="replace")[-240:] if stderr else "Snapshot capture failed"
+        raise HTTPException(502, detail)
+
+    return Response(content=stdout, media_type="image/jpeg")
 
 
 @router.post("/discover", response_model=List[ONVIFDiscoveryResult])

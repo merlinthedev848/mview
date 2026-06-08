@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 import psutil
 import shutil
@@ -116,10 +116,16 @@ async def get_storage_report():
     return storage_report()
 
 
+@router.get("/stream-diagnostics")
+async def get_stream_diagnostics():
+    from api.services.recorder import recorder_manager
+    return recorder_manager.diagnostics()
+
+
 @router.post("/recordings/purge")
-async def purge_recordings():
+async def purge_recordings(camera_id: str | None = Query(default=None)):
     from api.services.recorder import purge_all_recordings, storage_report
-    result = purge_all_recordings()
+    result = purge_all_recordings(camera_id)
     return {"status": "purged", **result, "storage_report": storage_report()}
 
 

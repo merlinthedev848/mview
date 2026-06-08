@@ -31,6 +31,9 @@ class CameraRecorder:
         self.rtsp_url = rtsp_url
         self._task: asyncio.Task | None = None
         self._stop = False
+        self.last_started_at: datetime | None = None
+        self.last_error: str | None = None
+        self.restart_count = 0
 
     def start(self):
         self._stop = False
@@ -45,13 +48,17 @@ class CameraRecorder:
         backoff = 5
         while not self._stop:
             try:
+                self.last_started_at = datetime.utcnow()
+                self.last_error = None
                 await self._record_once()
                 backoff = 5  # reset on clean exit
             except asyncio.CancelledError:
                 logger.info(f"[{self.camera_name}] Recorder cancelled.")
                 return
             except Exception as e:
-                logger.warning(f"[{self.camera_name}] Recorder error: {e}. Retrying in {backoff}s…")
+                self.restart_count += 1
+                self.last_error = str(e)[-240:]
+                logger.warning(f"[{self.camera_name}] Recorder error: {e}. Retrying in {backoff}s...")
             if not self._stop:
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 120)
@@ -250,6 +257,20 @@ class RecorderManager:
     def status(self) -> dict:
         return {cid: "recording" for cid in self._recorders}
 
+    def diagnostics(self) -> dict:
+        return {
+            cid: {
+                "status": "recording",
+                "camera_name": rec.camera_name,
+                "stream_url": rec.rtsp_url,
+                "started_at": rec.last_started_at.isoformat() if rec.last_started_at else None,
+                "restart_count": rec.restart_count,
+                "last_error": rec.last_error,
+                "task_done": rec._task.done() if rec._task else True,
+            }
+            for cid, rec in self._recorders.items()
+        }
+
 
 recorder_manager = RecorderManager()
 
@@ -332,15 +353,16 @@ def storage_report() -> dict:
     return report
 
 
-def purge_all_recordings() -> dict:
-    """Delete every recording segment file from the configured recording store."""
+def purge_all_recordings(camera_id: str | None = None) -> dict:
+    """Delete recording segment files from the configured recording store."""
     purged_count = 0
     purged_bytes = 0
 
     if not RECORDINGS_BASE.exists():
         return {"deleted_files": 0, "deleted_gb": 0.0}
 
-    for cam_dir in RECORDINGS_BASE.iterdir():
+    camera_dirs = [RECORDINGS_BASE / camera_id] if camera_id else list(RECORDINGS_BASE.iterdir())
+    for cam_dir in camera_dirs:
         if not cam_dir.is_dir():
             continue
         for f in cam_dir.glob("*.mp4"):
@@ -352,7 +374,8 @@ def purge_all_recordings() -> dict:
             except Exception as e:
                 logger.error(f"Error purging recording {f}: {e}")
 
-    logger.warning(f"Manual recording purge deleted {purged_count} files ({round(purged_bytes / 1_073_741_824, 2)} GB)")
+    target = camera_id or "all cameras"
+    logger.warning(f"Manual recording purge for {target} deleted {purged_count} files ({round(purged_bytes / 1_073_741_824, 2)} GB)")
     return {
         "deleted_files": purged_count,
         "deleted_gb": round(purged_bytes / 1_073_741_824, 2),

@@ -168,6 +168,16 @@ interface StorageReport {
   }>;
 }
 
+interface StreamDiagnostic {
+  status: string;
+  camera_name: string;
+  stream_url: string;
+  started_at?: string;
+  restart_count: number;
+  last_error?: string;
+  task_done?: boolean;
+}
+
 const defaultSystemConfig: SystemConfig = {
   retention_days: 30,
   ai: {
@@ -226,6 +236,13 @@ const Settings: React.FC = () => {
   const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
   const [storageReport, setStorageReport] = useState<StorageReport | null>(null);
   const [purgingRecordings, setPurgingRecordings] = useState(false);
+  const [purgeCameraId, setPurgeCameraId] = useState('');
+  const [streamDiagnostics, setStreamDiagnostics] = useState<Record<string, StreamDiagnostic>>({});
+  const [zoneSnapshotUrl, setZoneSnapshotUrl] = useState('');
+  const [zoneSnapshotLoading, setZoneSnapshotLoading] = useState(false);
+  const [zoneSnapshotError, setZoneSnapshotError] = useState('');
+  const [activeZoneId, setActiveZoneId] = useState('');
+  const [draggingPoint, setDraggingPoint] = useState<{ zoneId: string; pointIndex: number } | null>(null);
 
   const currentUser = getCurrentUser();
   const isAdmin = currentUser.role === 'admin';
@@ -279,21 +296,25 @@ const Settings: React.FC = () => {
 
   const loadSystemHealth = async () => {
     try {
-      const [healthRes, storageRes] = await Promise.all([
+      const [healthRes, storageRes, diagnosticsRes] = await Promise.all([
         fetch(apiUrl('/system/health')),
         fetch(apiUrl('/system/storage-report')),
+        fetch(apiUrl('/system/stream-diagnostics')),
       ]);
       if (healthRes.ok) setSystemHealth(await healthRes.json());
       if (storageRes.ok) setStorageReport(await storageRes.json());
+      if (diagnosticsRes.ok) setStreamDiagnostics(await diagnosticsRes.json());
     } catch {}
   };
 
   const purgeRecordings = async () => {
-    const usage = storageReport?.total_gb ? `${storageReport.total_gb} GB` : 'all stored video';
+    const selectedCamera = purgeCameraId ? cameras.find(cam => cam.id === purgeCameraId) : null;
+    const usage = selectedCamera ? `recordings for ${selectedCamera.name}` : (storageReport?.total_gb ? `${storageReport.total_gb} GB` : 'all stored video');
     if (!window.confirm(`Delete ${usage} of recordings? This cannot be undone.`)) return;
     setPurgingRecordings(true);
     try {
-      const res = await fetch(apiUrl('/system/recordings/purge'), { method: 'POST' });
+      const query = purgeCameraId ? `?camera_id=${encodeURIComponent(purgeCameraId)}` : '';
+      const res = await fetch(apiUrl(`/system/recordings/purge${query}`), { method: 'POST' });
       if (res.ok) {
         const data = await res.json();
         if (data.storage_report) setStorageReport(data.storage_report);
@@ -307,6 +328,25 @@ const Settings: React.FC = () => {
       showToast('Network error while purging recordings.');
     }
     setPurgingRecordings(false);
+  };
+
+  const loadZoneSnapshot = async (cameraId: string) => {
+    if (!cameraId) return;
+    if (zoneSnapshotUrl) URL.revokeObjectURL(zoneSnapshotUrl);
+    setZoneSnapshotUrl('');
+    setZoneSnapshotError('');
+    setZoneSnapshotLoading(true);
+    try {
+      const res = await fetch(apiUrl(`/cameras/${cameraId}/snapshot`));
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Snapshot capture failed.');
+      }
+      setZoneSnapshotUrl(URL.createObjectURL(await res.blob()));
+    } catch (err: any) {
+      setZoneSnapshotError(err.message || 'Snapshot capture failed.');
+    }
+    setZoneSnapshotLoading(false);
   };
 
   const fetchUsers = async () => {
@@ -400,6 +440,10 @@ const Settings: React.FC = () => {
 
   useEffect(() => { fetchCameras(); }, []);
 
+  useEffect(() => () => {
+    if (zoneSnapshotUrl) URL.revokeObjectURL(zoneSnapshotUrl);
+  }, [zoneSnapshotUrl]);
+
   // ── Auto-Discover ───────────────────────────────────────────────
   const discover = async () => {
     setDiscovering(true);
@@ -477,6 +521,9 @@ const Settings: React.FC = () => {
       if (res.ok) {
         setManualForm(emptyForm);
         setOriginalRtsp({ main: '', sub: '' });
+        setActiveZoneId('');
+        setZoneSnapshotUrl('');
+        setZoneSnapshotError('');
         setShowManualForm(false);
         setEditingId(null);
         await fetchCameras();
@@ -510,6 +557,27 @@ const Settings: React.FC = () => {
         };
       })
     }));
+  };
+
+  const updateZonePoint = (zoneId: string, pointIndex: number, point: ZonePoint) => {
+    setManualForm(form => ({
+      ...form,
+      zones: form.zones.map(zone => {
+        if (zone.id !== zoneId) return zone;
+        return {
+          ...zone,
+          points: zone.points.map((existing, index) => index === pointIndex ? point : existing)
+        };
+      })
+    }));
+  };
+
+  const pointFromPointer = (event: React.PointerEvent<SVGSVGElement>): ZonePoint => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)),
+    };
   };
 
   // ── Delete ──────────────────────────────────────────────────────
@@ -572,6 +640,9 @@ const Settings: React.FC = () => {
                       setEditingId(null);
                       setManualForm(emptyForm);
                       setOriginalRtsp({ main: '', sub: '' });
+                      setActiveZoneId('');
+                      setZoneSnapshotUrl('');
+                      setZoneSnapshotError('');
                       setSaveError('');
                       setShowManualForm(true);
                     }}>
@@ -650,9 +721,79 @@ const Settings: React.FC = () => {
                             <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-1)' }}>AI Zones & Alerts</div>
                             <div style={{ fontSize: '0.68rem', color: 'var(--text-3)', marginTop: 3 }}>Normalized points use 0.00 to 1.00 across the camera frame.</div>
                           </div>
-                          <button className="btn btn-ghost" style={{ padding: '7px 12px' }} onClick={() => setManualForm(f => ({ ...f, zones: [...f.zones, createDetectionZone()] }))}>
+                          <button className="btn btn-ghost" style={{ padding: '7px 12px' }} onClick={() => {
+                            const zone = createDetectionZone();
+                            setManualForm(f => ({ ...f, zones: [...f.zones, zone] }));
+                            setActiveZoneId(zone.id);
+                          }}>
                             <Plus size={14} /> Add Zone
                           </button>
+                        </div>
+                        <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 12, background: 'rgba(0,0,0,0.25)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-3)' }}>Visual zone editor</div>
+                            <button className="btn btn-ghost" style={{ padding: '6px 10px' }} onClick={() => editingId && loadZoneSnapshot(editingId)} disabled={!editingId || zoneSnapshotLoading}>
+                              {zoneSnapshotLoading ? 'Loading...' : 'Load Snapshot'}
+                            </button>
+                          </div>
+                          {zoneSnapshotError && <div style={{ padding: 12, color: 'var(--amber)', fontSize: '0.72rem' }}>{zoneSnapshotError}</div>}
+                          {zoneSnapshotUrl ? (
+                            <div style={{ position: 'relative', aspectRatio: '16 / 9', width: '100%', maxHeight: 420 }}>
+                              <img src={zoneSnapshotUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', background: '#000' }} />
+                              <svg
+                                viewBox="0 0 1 1"
+                                preserveAspectRatio="none"
+                                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', cursor: draggingPoint ? 'grabbing' : 'crosshair' }}
+                                onPointerMove={event => {
+                                  if (!draggingPoint) return;
+                                  updateZonePoint(draggingPoint.zoneId, draggingPoint.pointIndex, pointFromPointer(event));
+                                }}
+                                onPointerUp={() => setDraggingPoint(null)}
+                                onPointerLeave={() => setDraggingPoint(null)}
+                                onClick={event => {
+                                  if (!activeZoneId || draggingPoint) return;
+                                  const point = pointFromPointer(event);
+                                  setManualForm(form => ({
+                                    ...form,
+                                    zones: form.zones.map(zone => zone.id === activeZoneId ? { ...zone, points: [...zone.points, point] } : zone)
+                                  }));
+                                }}
+                              >
+                                {manualForm.zones.map(zone => (
+                                  <g key={zone.id} opacity={zone.enabled ? 1 : 0.35}>
+                                    {zone.points.length >= 2 && (
+                                      <polygon
+                                        points={zone.points.map(p => `${p.x},${p.y}`).join(' ')}
+                                        fill={zone.id === activeZoneId ? 'rgba(0, 230, 118, 0.22)' : 'rgba(0, 229, 255, 0.14)'}
+                                        stroke={zone.id === activeZoneId ? 'var(--green)' : 'var(--cyan)'}
+                                        strokeWidth="0.004"
+                                      />
+                                    )}
+                                    {zone.points.map((point, index) => (
+                                      <circle
+                                        key={`${zone.id}-${index}`}
+                                        cx={point.x}
+                                        cy={point.y}
+                                        r="0.012"
+                                        fill={zone.id === activeZoneId ? 'var(--green)' : 'var(--cyan)'}
+                                        stroke="#001018"
+                                        strokeWidth="0.004"
+                                        onPointerDown={event => {
+                                          event.stopPropagation();
+                                          setActiveZoneId(zone.id);
+                                          setDraggingPoint({ zoneId: zone.id, pointIndex: index });
+                                        }}
+                                      />
+                                    ))}
+                                  </g>
+                                ))}
+                              </svg>
+                            </div>
+                          ) : (
+                            <div style={{ padding: 12, color: 'var(--text-3)', fontSize: '0.72rem' }}>
+                              {editingId ? 'Load a current camera snapshot, select a zone below, then click or drag points on the image.' : 'Save the camera first, then edit it to draw zones over a live snapshot.'}
+                            </div>
+                          )}
                         </div>
                         {manualForm.zones.length === 0 ? (
                           <div style={{ fontSize: '0.76rem', color: 'var(--text-3)', border: '1px dashed var(--border)', borderRadius: 8, padding: 12 }}>
@@ -661,11 +802,11 @@ const Settings: React.FC = () => {
                         ) : (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                             {manualForm.zones.map(zone => (
-                              <div key={zone.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, background: 'rgba(255,255,255,0.02)' }}>
+                              <div key={zone.id} style={{ border: zone.id === activeZoneId ? '1px solid var(--green)' : '1px solid var(--border)', borderRadius: 8, padding: 12, background: 'rgba(255,255,255,0.02)' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 130px auto', gap: 10, alignItems: 'end' }}>
                                   <div className="form-group">
                                     <label className="form-label">Zone Name</label>
-                                    <input className="form-input" value={zone.name} onChange={e => updateZone(zone.id, { name: e.target.value })} />
+                                    <input className="form-input" value={zone.name} onFocus={() => setActiveZoneId(zone.id)} onChange={e => updateZone(zone.id, { name: e.target.value })} />
                                   </div>
                                   <div className="form-group">
                                     <label className="form-label">Min Confidence</label>
@@ -680,6 +821,11 @@ const Settings: React.FC = () => {
                                   <button className="btn btn-danger" style={{ padding: '9px 12px' }} onClick={() => setManualForm(f => ({ ...f, zones: f.zones.filter(z => z.id !== zone.id) }))}>
                                     <Trash2 size={14} />
                                   </button>
+                                </div>
+                                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                                  <button className="btn btn-ghost" style={{ padding: '6px 10px' }} onClick={() => setActiveZoneId(zone.id)}>Edit On Snapshot</button>
+                                  <button className="btn btn-ghost" style={{ padding: '6px 10px' }} onClick={() => updateZone(zone.id, { points: createDetectionZone().points })}>Reset Points</button>
+                                  <button className="btn btn-ghost" style={{ padding: '6px 10px' }} onClick={() => updateZone(zone.id, { points: zone.points.slice(0, -1) })}>Remove Last Point</button>
                                 </div>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginTop: 10 }}>
                                   <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
@@ -716,7 +862,7 @@ const Settings: React.FC = () => {
                       <button className="btn btn-primary" onClick={addManually} disabled={savingManual}>
                         {savingManual ? <><div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Saving…</> : <><CheckCircle size={15} /> Save Camera</>}
                       </button>
-                      <button className="btn btn-ghost" onClick={() => { setShowManualForm(false); setSaveError(''); setEditingId(null); setOriginalRtsp({ main: '', sub: '' }); setManualForm(emptyForm); }}>
+                      <button className="btn btn-ghost" onClick={() => { setShowManualForm(false); setSaveError(''); setEditingId(null); setOriginalRtsp({ main: '', sub: '' }); setActiveZoneId(''); setZoneSnapshotUrl(''); setZoneSnapshotError(''); setManualForm(emptyForm); }}>
                         Cancel
                       </button>
                     </div>
@@ -785,6 +931,9 @@ const Settings: React.FC = () => {
                                 record_substream: cam.config?.record_substream || false,
                                 zones: Array.isArray(cam.config?.zones) ? cam.config.zones : []
                               });
+                              setActiveZoneId(Array.isArray(cam.config?.zones) && cam.config.zones[0] ? cam.config.zones[0].id : '');
+                              setZoneSnapshotUrl('');
+                              setZoneSnapshotError('');
                               setOriginalRtsp({ main: cam.rtsp_url_main || '', sub: cam.rtsp_url_sub || '' });
                               setEditingId(cam.id);
                               setShowManualForm(true);
@@ -1104,9 +1253,13 @@ const Settings: React.FC = () => {
                     </div>
                     <div className="form-group">
                       <label className="form-label">Development Cleanup</label>
+                      <select className="form-input" value={purgeCameraId} onChange={e => setPurgeCameraId(e.target.value)} style={{ marginBottom: 10, maxWidth: 260 }}>
+                        <option value="">All cameras</option>
+                        {cameras.map(cam => <option key={cam.id} value={cam.id}>{cam.name}</option>)}
+                      </select>
                       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                         <button className="btn btn-danger" onClick={purgeRecordings} disabled={purgingRecordings}>
-                          {purgingRecordings ? 'Purging...' : <><Trash2 size={14} /> Purge All Recordings</>}
+                          {purgingRecordings ? 'Purging...' : <><Trash2 size={14} /> Purge Recordings</>}
                         </button>
                         <span style={{ color: 'var(--text-3)', fontSize: '0.72rem' }}>
                           Current archive: {storageReport ? `${storageReport.total_gb} GB` : 'loading...'}
@@ -1116,6 +1269,36 @@ const Settings: React.FC = () => {
                         Deletes all MP4 recording segments from disk. Camera settings and users are not changed.
                       </div>
                     </div>
+                  </div>
+                </div>
+
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-1)', marginBottom: 16 }}>Stream Watchdog Diagnostics</div>
+                  <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+                    {Object.keys(streamDiagnostics).length === 0 ? (
+                      <div style={{ padding: 14, color: 'var(--text-3)', fontSize: '0.78rem' }}>No active recorder diagnostics available yet.</div>
+                    ) : (
+                      Object.entries(streamDiagnostics).map(([cameraId, diag]) => (
+                        <div key={cameraId} style={{ display: 'grid', gridTemplateColumns: '1.2fr 90px 90px 1fr', gap: 12, padding: '12px 14px', borderBottom: '1px solid var(--border)', alignItems: 'center', fontSize: '0.76rem' }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ color: 'var(--text-1)', fontWeight: 700 }}>{diag.camera_name || cameraNameById[cameraId] || cameraId}</div>
+                            <div style={{ color: 'var(--text-3)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{maskRtspPassword(diag.stream_url || '')}</div>
+                          </div>
+                          <div>
+                            <div style={{ color: 'var(--text-3)', fontSize: '0.65rem', textTransform: 'uppercase' }}>Status</div>
+                            <div style={{ color: diag.task_done ? 'var(--red)' : 'var(--green)', fontWeight: 700 }}>{diag.task_done ? 'Stopped' : diag.status}</div>
+                          </div>
+                          <div>
+                            <div style={{ color: 'var(--text-3)', fontSize: '0.65rem', textTransform: 'uppercase' }}>Restarts</div>
+                            <div style={{ color: diag.restart_count > 0 ? 'var(--amber)' : 'var(--text-1)', fontFamily: 'JetBrains Mono' }}>{diag.restart_count}</div>
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ color: 'var(--text-3)', fontSize: '0.65rem', textTransform: 'uppercase' }}>Last Error</div>
+                            <div style={{ color: diag.last_error ? 'var(--amber)' : 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{diag.last_error || 'None'}</div>
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
 
