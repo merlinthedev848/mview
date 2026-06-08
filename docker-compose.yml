@@ -3,6 +3,8 @@ services:
     image: alexxit/go2rtc:latest
     container_name: sentinel-go2rtc
     network_mode: host
+    security_opt:
+      - apparmor=unconfined
     volumes:
       - ./go2rtc.yaml:/config/go2rtc.yaml
     restart: unless-stopped
@@ -13,6 +15,8 @@ services:
       dockerfile: api/Dockerfile
     container_name: sentinel-api
     network_mode: host          # Host networking so ONVIF UDP multicast reaches LAN cameras
+    security_opt:
+      - apparmor=unconfined
     environment:
       - DATABASE_URL=postgresql+asyncpg://sentinel:sentinel@127.0.0.1:5432/sentinelnvr
       - REDIS_URL=redis://127.0.0.1:6379/0
@@ -37,6 +41,8 @@ services:
       dockerfile: Dockerfile
     container_name: sentinel-detector
     network_mode: host
+    security_opt:
+      - apparmor=unconfined
     environment:
       - MQTT_BROKER=127.0.0.1
       - MQTT_PORT=1883
@@ -51,6 +57,8 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: sentinel-postgres
+    security_opt:
+      - apparmor=unconfined
     environment:
       - POSTGRES_USER=sentinel
       - POSTGRES_PASSWORD=sentinel
@@ -64,6 +72,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: sentinel-redis
+    security_opt:
+      - apparmor=unconfined
     volumes:
       - redis_data:/data
     ports:
@@ -73,6 +83,8 @@ services:
   mqtt:
     image: eclipse-mosquitto:2
     container_name: sentinel-mqtt
+    security_opt:
+      - apparmor=unconfined
     volumes:
       - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf
     ports:
