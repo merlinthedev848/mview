@@ -13,15 +13,16 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
+from api.config import settings
 
 logger = logging.getLogger("mView-Recorder")
 
-RECORDINGS_BASE = Path(os.environ.get("RECORDINGS_DIR", "/mnt/storage/mview/recordings"))
-SEGMENT_DURATION = int(os.environ.get("SEGMENT_SECONDS") or (int(os.environ.get("SEGMENT_MINUTES", "1")) * 60))
-RECORD_SUBSTREAM_DEFAULT = os.environ.get("RECORD_SUBSTREAM_DEFAULT", "false").lower() in {"1", "true", "yes", "on"}
-RECORD_VIDEO_CODEC = os.environ.get("RECORD_VIDEO_CODEC", "copy").lower()
-RECORD_VIDEO_CRF = os.environ.get("RECORD_VIDEO_CRF", "30")
-RECORD_VIDEO_PRESET = os.environ.get("RECORD_VIDEO_PRESET", "veryfast")
+RECORDINGS_BASE = Path(settings.recordings_dir)
+SEGMENT_DURATION = settings.segment_seconds
+RECORD_SUBSTREAM_DEFAULT = settings.record_substream_default
+RECORD_VIDEO_CODEC = settings.record_video_codec.lower()
+RECORD_VIDEO_CRF = settings.record_video_crf
+RECORD_VIDEO_PRESET = settings.record_video_preset
 
 
 class CameraRecorder:
@@ -43,6 +44,7 @@ class CameraRecorder:
         self._stop = True
         if self._task:
             self._task.cancel()
+        self._task = None
 
     async def _run_loop(self):
         backoff = 5
@@ -90,7 +92,7 @@ class CameraRecorder:
             stdout, _ = await asyncio.wait_for(probe_proc.communicate(), timeout=8.0)
             if probe_proc.returncode == 0:
                 import json
-                data = json.loads(stdout.decode())
+                data = json.loads(stdout.decode() or "{}")
                 for stream in data.get("streams", []):
                     if stream.get("codec_type") == "audio":
                         codec = stream.get("codec_name")
@@ -284,6 +286,7 @@ def list_recordings(camera_id: str | None = None) -> list[dict]:
 
     cam_dirs = [base / camera_id] if camera_id else [d for d in base.iterdir() if d.is_dir()]
 
+    max_results = 1000
     for cam_dir in cam_dirs:
         if not cam_dir.exists():
             continue
@@ -300,6 +303,8 @@ def list_recordings(camera_id: str | None = None) -> list[dict]:
                 "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
                 "url": f"/recordings/{cam_dir.name}/{f.name}",
             })
+            if len(results) >= max_results:
+                return results
     return results
 
 

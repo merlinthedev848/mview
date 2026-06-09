@@ -18,8 +18,8 @@ from jose import jwt, JWTError
 log = logging.getLogger("sentinel")
 
 # Fetch JWT config directly for the middleware
-SECRET_KEY = os.getenv("JWT_SECRET", "super-secret-mview-key")
-ALGORITHM = "HS256"
+SECRET_KEY = settings.jwt_secret
+ALGORITHM = settings.jwt_algorithm
 
 
 async def retention_worker():
@@ -83,11 +83,18 @@ async def lifespan(app: FastAPI):
     log.info(f"Recorder started for {len(cams)} camera(s).")
 
     # Start retention worker
-    asyncio.create_task(retention_worker())
+    background_tasks = [
+        asyncio.create_task(retention_worker(), name="retention-worker"),
+    ]
     from api.services.event_processor import process_mqtt_events
-    asyncio.create_task(process_mqtt_events())
+    background_tasks.append(asyncio.create_task(process_mqtt_events(), name="mqtt-event-processor"))
 
-    yield
+    try:
+        yield
+    finally:
+        for task in background_tasks:
+            task.cancel()
+        await asyncio.gather(*background_tasks, return_exceptions=True)
 
     # ── Shutdown ─────────────────────────────────────────────────────
     recorder_manager.stop_all()
@@ -175,12 +182,14 @@ async def health():
 
 
 # ── Serve recorded video files ─────────────────────────────────────
-RECORDINGS_DIR = Path(os.environ.get("RECORDINGS_DIR", "/mnt/storage/mview/recordings"))
+RECORDINGS_DIR = Path(settings.recordings_dir).resolve()
 
 
 @app.get("/recordings/{camera_id}/{filename}")
 async def serve_recording(camera_id: str, filename: str, request: Request):
-    fp = RECORDINGS_DIR / camera_id / filename
+    fp = (RECORDINGS_DIR / camera_id / filename).resolve()
+    if RECORDINGS_DIR not in fp.parents:
+        raise HTTPException(400, "Invalid recording path")
     if not fp.exists() or not fp.is_file():
         raise HTTPException(404, "Recording not found")
     file_size = fp.stat().st_size

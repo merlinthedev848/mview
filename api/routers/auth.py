@@ -5,16 +5,16 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-import os
 
 from api.database import get_db
 from api.models.user import User
+from api.config import settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-SECRET_KEY = os.getenv("JWT_SECRET", "super-secret-mview-key")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 # 1 day
+SECRET_KEY = settings.jwt_secret
+ALGORITHM = settings.jwt_algorithm
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.jwt_access_token_expire_minutes
 
 pwd_context = CryptContext(schemes=["bcrypt_sha256", "bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")

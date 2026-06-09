@@ -84,6 +84,8 @@ const CameraFeedComponent: React.FC<{
   const [retryNonce, setRetryNonce] = useState(0);
   const streamName = maximized ? `${cam.id}_main` : cam.rtsp_url_sub ? `${cam.id}_sub` : cam.id;
 
+  const iceServersKey = useMemo(() => JSON.stringify(iceServers), [iceServers]);
+
   useEffect(() => {
     if (cam.status === 'offline' || !cam.rtsp_url_main) return;
 
@@ -149,7 +151,7 @@ const CameraFeedComponent: React.FC<{
       pc.close();
       setConnected(false);
     };
-  }, [cam.id, cam.name, cam.status, cam.rtsp_url_main, streamName, retryNonce, JSON.stringify(iceServers)]);
+  }, [cam.id, cam.name, cam.status, cam.rtsp_url_main, streamName, retryNonce, iceServersKey]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -244,6 +246,12 @@ const LiveView: React.FC = () => {
         setIceServers(servers.map((url: string) => ({ urls: url })));
       }
     } catch {}
+  };
+
+  const recordingSrc = (url: string) => {
+    const token = localStorage.getItem('mview_token');
+    const separator = url.includes('?') ? '&' : '?';
+    return apiUrl(token ? `${url}${separator}token=${encodeURIComponent(token)}` : url);
   };
 
   useEffect(() => {
@@ -395,7 +403,7 @@ const LiveView: React.FC = () => {
                     <video
                       ref={el => { syncVideoRefs.current[cam.id] = el; }}
                       key={rec.url}
-                      src={apiUrl(rec.url)}
+                      src={recordingSrc(rec.url)}
                       autoPlay={!syncPaused}
                       muted
                       playsInline
@@ -468,7 +476,7 @@ const CameraFeed = React.memo(CameraFeedComponent, (prev, next) => (
   prev.analytics === next.analytics &&
   prev.maximized === next.maximized &&
   prev.paused === next.paused &&
-  JSON.stringify(prev.iceServers) === JSON.stringify(next.iceServers)
+  prev.iceServers === next.iceServers
 ));
 
 export default LiveView;

@@ -1,15 +1,22 @@
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base
-import os
+from api.config import settings
 
-# For development, we'll use SQLite if DATABASE_URL isn't provided (even though docker uses postgres)
-# In production, this would be: postgresql+asyncpg://sentinel:sentinel@postgres:5432/sentinelnvr
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./mview.db")
+DATABASE_URL = settings.database_url
 
-engine = create_async_engine(DATABASE_URL, echo=False)
+engine_kwargs = {
+    "echo": settings.db_echo,
+    "pool_pre_ping": True,
+}
+if DATABASE_URL.startswith("postgresql"):
+    engine_kwargs.update(
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+    )
+
+engine = create_async_engine(DATABASE_URL, **engine_kwargs)
 async_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-from pgvector.sqlalchemy import Vector
 from sqlalchemy import text
 
 Base = declarative_base()

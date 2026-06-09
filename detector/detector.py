@@ -13,6 +13,17 @@ logger = logging.getLogger("mView-Detector")
 
 MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
 MQTT_PORT = int(os.getenv("MQTT_PORT", 1883))
+MODEL_NAME = os.getenv("DETECTOR_MODEL", "yolov8n.pt")
+ACCELERATOR = os.getenv("ACCELERATOR", "cpu").lower()
+FRAME_STRIDE = max(1, int(os.getenv("FRAME_STRIDE", "6")))
+IMAGE_SIZE = int(os.getenv("IMAGE_SIZE", "640"))
+MIN_CONFIDENCE = float(os.getenv("MIN_CONFIDENCE", "0.5"))
+EVENT_COOLDOWN_SECONDS = float(os.getenv("EVENT_COOLDOWN_SECONDS", "5"))
+DETECT_CLASSES = [
+    int(value)
+    for value in os.getenv("DETECT_CLASSES", "0,2,3,5,7").split(",")
+    if value.strip().isdigit()
+]
 
 # For demonstration, we'll monitor a single camera stream.
 # In a full multi-processing architecture, this would be spawned per camera.
@@ -22,9 +33,13 @@ STREAM_URL = os.getenv("STREAM_URL", "rtsp://localhost:8554/camera1")
 
 class DetectorNode:
     def __init__(self):
-        logger.info("Initializing YOLOv8 Nano model...")
-        # Automatically downloads yolov8n.pt if not present
-        self.model = YOLO('yolov8n.pt')
+        logger.info("Initializing YOLO model %s on %s...", MODEL_NAME, ACCELERATOR)
+        self.model = YOLO(MODEL_NAME)
+        if ACCELERATOR != "cpu":
+            try:
+                self.model.to(ACCELERATOR)
+            except Exception as e:
+                logger.warning("Could not move YOLO model to %s: %s. Falling back to default device.", ACCELERATOR, e)
         
         logger.info(f"Connecting to MQTT Broker at {MQTT_BROKER}:{MQTT_PORT}...")
         self.mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
@@ -35,8 +50,8 @@ class DetectorNode:
             logger.error(f"Failed to connect to MQTT: {e}")
             self.mqtt_client = None
 
-        self.last_event_time = 0
-        self.cooldown = 5 # seconds between sending events for the same object class
+        self.last_event_by_class: dict[str, float] = {}
+        self.cooldown = EVENT_COOLDOWN_SECONDS
 
     def run(self):
         logger.info(f"Connecting to stream: {STREAM_URL}")
@@ -55,25 +70,35 @@ class DetectorNode:
             
             # Process every Nth frame to save CPU (e.g., 5 fps)
             frame_count += 1
-            if frame_count % 6 != 0:
+            if frame_count % FRAME_STRIDE != 0:
                 continue
 
             frame_h, frame_w = frame.shape[:2]
 
             # Run YOLO inference
-            results = self.model(frame, verbose=False, classes=[0, 2, 3, 5, 7]) # person, car, motorcycle, bus, truck
+            results = self.model(
+                frame,
+                verbose=False,
+                classes=DETECT_CLASSES,
+                conf=MIN_CONFIDENCE,
+                imgsz=IMAGE_SIZE,
+            )
 
             detections = []
             for r in results:
                 boxes = r.boxes
                 for box in boxes:
                     conf = float(box.conf[0])
-                    if conf < 0.5:
+                    if conf < MIN_CONFIDENCE:
                         continue
                     
                     cls_id = int(box.cls[0])
                     class_name = self.model.names[cls_id]
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
+                    x1, y1 = max(0, x1), max(0, y1)
+                    x2, y2 = min(frame_w, x2), min(frame_h, y2)
+                    if x2 <= x1 or y2 <= y1:
+                        continue
                     
                     # Generate Semantic Embedding for the detected object
                     # We crop the image to the bounding box
@@ -109,20 +134,27 @@ class DetectorNode:
 
     def publish_event(self, detections, frame_w, frame_h):
         now = time.time()
-        if now - self.last_event_time < self.cooldown:
+        publishable = []
+        for detection in detections:
+            object_class = detection.get("class", "object")
+            last_seen = self.last_event_by_class.get(object_class, 0)
+            if now - last_seen >= self.cooldown:
+                publishable.append(detection)
+                self.last_event_by_class[object_class] = now
+
+        if not publishable:
             return
-        
-        self.last_event_time = now
+
         payload = {
             "camera_id": CAMERA_ID,
             "timestamp": now,
             "frame": {"width": frame_w, "height": frame_h},
-            "objects": detections
+            "objects": publishable
         }
         topic = f"sentinel/events/{CAMERA_ID}"
         if self.mqtt_client:
-            self.mqtt_client.publish(topic, json.dumps(payload))
-            logger.info(f"Published event with {len(detections)} objects to {topic}")
+            self.mqtt_client.publish(topic, json.dumps(payload, separators=(",", ":")), qos=0)
+            logger.info(f"Published event with {len(publishable)} objects to {topic}")
 
 if __name__ == "__main__":
     node = DetectorNode()

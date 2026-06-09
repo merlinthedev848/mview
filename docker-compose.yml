@@ -49,6 +49,12 @@ services:
       - STREAM_URL=rtsp://127.0.0.1:8554/camera1
       - CAMERA_ID=default_cam
       - ACCELERATOR=cpu
+      - DETECTOR_MODEL=yolov8n.pt
+      - FRAME_STRIDE=6
+      - IMAGE_SIZE=640
+      - MIN_CONFIDENCE=0.5
+      - EVENT_COOLDOWN_SECONDS=5
+      - DETECT_CLASSES=0,2,3,5,7
     depends_on:
       - mqtt
       - go2rtc

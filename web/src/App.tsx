@@ -1,14 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { Suspense, lazy, useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
 import { Video, PlaySquare, Bell, Settings as SettingsIcon, ShieldCheck, HardDrive, LogOut, Wifi } from 'lucide-react';
 
-import LiveView  from './pages/LiveView';
-import Playback  from './pages/Playback';
-import Events    from './pages/Events';
-import Settings  from './pages/Settings';
 import Login     from './pages/Login';
-import Wallboard from './pages/Wallboard';
 import { apiUrl } from './lib/endpoints';
+
+const LiveView = lazy(() => import('./pages/LiveView'));
+const Playback = lazy(() => import('./pages/Playback'));
+const Events = lazy(() => import('./pages/Events'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Wallboard = lazy(() => import('./pages/Wallboard'));
 
 // Setup global fetch interceptor to inject JWT
 const originalFetch = window.fetch;
@@ -207,7 +208,9 @@ function App() {
   if (window.location.pathname === '/wallboard') {
     return (
       <Router>
-        <Wallboard />
+        <Suspense fallback={<div className="empty">Loading...</div>}>
+          <Wallboard />
+        </Suspense>
       </Router>
     );
   }
@@ -217,12 +220,14 @@ function App() {
       <div className="app-shell">
         <Sidebar onLogout={handleLogout} />
         <div className="main-content">
-          <Routes>
-            <Route path="/"         element={<LiveView />}  />
-            <Route path="/playback" element={<Playback />}  />
-            <Route path="/events"   element={<Events />}    />
-            <Route path="/settings" element={<Settings />}  />
-          </Routes>
+          <Suspense fallback={<div className="empty">Loading...</div>}>
+            <Routes>
+              <Route path="/"         element={<LiveView />}  />
+              <Route path="/playback" element={<Playback />}  />
+              <Route path="/events"   element={<Events />}    />
+              <Route path="/settings" element={<Settings />}  />
+            </Routes>
+          </Suspense>
         </div>
       </div>
     </Router>

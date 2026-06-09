@@ -5,12 +5,13 @@ from aiomqtt import Client as MQTTClient
 from api.database import async_session_maker
 from api.models.ai import SemanticEvent
 from api.models.camera import Camera
-import os
+from api.config import settings
 from datetime import datetime
 
 logger = logging.getLogger("mView-EventProcessor")
 
-MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
+MQTT_BROKER = settings.mqtt_broker
+MQTT_PORT = settings.mqtt_port
 _LAST_ZONE_EVENTS: dict[tuple[str, str, str], float] = {}
 
 
@@ -84,11 +85,11 @@ async def process_mqtt_events():
     Background task that listens to MQTT events from the AI Detector
     and persists them into the PostgreSQL database.
     """
-    logger.info(f"Connecting to MQTT Broker at {MQTT_BROKER} to subscribe to events...")
+    logger.info(f"Connecting to MQTT Broker at {MQTT_BROKER}:{MQTT_PORT} to subscribe to events...")
     
     while True:
         try:
-            async with MQTTClient(MQTT_BROKER) as client:
+            async with MQTTClient(MQTT_BROKER, port=MQTT_PORT) as client:
                 await client.subscribe("sentinel/events/#")
                 logger.info("Subscribed to sentinel/events/#")
                 
@@ -106,11 +107,16 @@ async def process_mqtt_events():
                         if not objects:
                             continue
 
-                        logger.info(f"Received event from {camera_id} with {len(objects)} objects")
+                        if not camera_id:
+                            logger.warning("Skipping MQTT event without camera_id")
+                            continue
 
                         async with async_session_maker() as session:
                             zones = []
                             camera = await session.get(Camera, camera_id)
+                            if not camera:
+                                logger.warning(f"Skipping event for unknown camera {camera_id}")
+                                continue
                             if camera and isinstance(camera.config, dict):
                                 zones = camera.config.get("zones") or []
 
@@ -146,13 +152,17 @@ async def process_mqtt_events():
                                 saved_count += 1
                                     
                             await session.commit()
-                            logger.info(f"Saved {saved_count} events to Postgres with embeddings.")
+                            if saved_count:
+                                logger.info(f"Saved {saved_count} events to Postgres with embeddings.")
                             
                     except json.JSONDecodeError:
                         logger.error("Failed to decode MQTT payload")
                     except Exception as db_err:
                         logger.error(f"Database error while saving event: {db_err}")
                         
+        except asyncio.CancelledError:
+            logger.info("MQTT event processor cancelled.")
+            raise
         except Exception as e:
             logger.error(f"MQTT connection lost: {e}. Reconnecting in 5 seconds...")
             await asyncio.sleep(5)

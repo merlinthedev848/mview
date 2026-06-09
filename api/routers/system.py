@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+import asyncio
 import psutil
 import shutil
 import os
@@ -82,7 +83,7 @@ async def get_system_health():
     memory = psutil.virtual_memory()
     net = psutil.net_io_counters()
     
-    storage_path = os.getenv("STORAGE_PATH", "/mnt/storage/mview")
+    storage_path = settings.storage_path
     try:
         total, used, free = shutil.disk_usage(storage_path)
     except FileNotFoundError:
@@ -113,7 +114,7 @@ async def get_system_health():
 @router.get("/storage-report")
 async def get_storage_report():
     from api.services.recorder import storage_report
-    return storage_report()
+    return await asyncio.to_thread(storage_report)
 
 
 @router.get("/stream-diagnostics")
@@ -125,8 +126,9 @@ async def get_stream_diagnostics():
 @router.post("/recordings/purge")
 async def purge_recordings(camera_id: str | None = Query(default=None)):
     from api.services.recorder import purge_all_recordings, storage_report
-    result = purge_all_recordings(camera_id)
-    return {"status": "purged", **result, "storage_report": storage_report()}
+    result = await asyncio.to_thread(purge_all_recordings, camera_id)
+    report = await asyncio.to_thread(storage_report)
+    return {"status": "purged", **result, "storage_report": report}
 
 
 @router.get("/config")
