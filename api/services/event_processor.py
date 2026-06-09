@@ -6,6 +6,7 @@ from api.database import async_session_maker
 from api.models.ai import SemanticEvent
 from api.models.camera import Camera
 from api.config import settings
+from api.services.local_core import local_core
 from datetime import datetime
 
 logger = logging.getLogger("mView-EventProcessor")
@@ -153,6 +154,11 @@ async def process_mqtt_events():
                                     
                             await session.commit()
                             if saved_count:
+                                await local_core.publish("ai_event", {
+                                    "camera_id": camera_id,
+                                    "count": saved_count,
+                                    "timestamp": timestamp.isoformat(),
+                                })
                                 logger.info(f"Saved {saved_count} events to Postgres with embeddings.")
                             
                     except json.JSONDecodeError:

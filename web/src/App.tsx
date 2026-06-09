@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useState, useEffect, useRef } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
 import { Video, PlaySquare, Bell, Settings as SettingsIcon, ShieldCheck, HardDrive, LogOut, Wifi } from 'lucide-react';
 
@@ -42,9 +42,26 @@ const Sidebar = ({ onLogout }: { onLogout: () => void }) => {
   const [storage, setStorage] = useState<any>(null);
   const [recordingStorage, setRecordingStorage] = useState<any>(null);
   const [systemStats, setSystemStats] = useState({ cpu: '--', up: '0.00', down: '0.00', latency: '--' });
-  const previousNetwork = useRef<{ sent: number; recv: number; timestamp: number } | null>(null);
 
   useEffect(() => {
+    let fallbackTimer: number | undefined;
+
+    const applySnapshot = (snapshot: any) => {
+      const h = snapshot?.health;
+      setCameras(Array.isArray(snapshot?.cameras) ? snapshot.cameras : []);
+      setEvents(Array.isArray(snapshot?.events) ? snapshot.events : []);
+      if (snapshot?.recording_storage) setRecordingStorage(snapshot.recording_storage);
+      if (h?.storage) {
+        setStorage(h.storage);
+        setSystemStats({
+          cpu: typeof h.cpu_usage_percent === 'number' ? h.cpu_usage_percent.toFixed(1) : '--',
+          up: typeof h.network?.up_mbps === 'number' ? h.network.up_mbps.toFixed(2) : '0.00',
+          down: typeof h.network?.down_mbps === 'number' ? h.network.down_mbps.toFixed(2) : '0.00',
+          latency: typeof h.latency_ms === 'number' ? `${h.latency_ms}` : '--',
+        });
+      }
+    };
+
     const load = async () => {
       try {
         const started = performance.now();
@@ -59,30 +76,38 @@ const Sidebar = ({ onLogout }: { onLogout: () => void }) => {
         if (s) setRecordingStorage(s);
         if (h && h.storage) {
           setStorage(h.storage);
-          const now = Date.now();
-          const previous = previousNetwork.current;
-          let up = 0;
-          let down = 0;
-          if (previous && h.network) {
-            const elapsed = Math.max((now - previous.timestamp) / 1000, 1);
-            up = Math.max(0, ((h.network.bytes_sent - previous.sent) * 8) / elapsed / 1_000_000);
-            down = Math.max(0, ((h.network.bytes_recv - previous.recv) * 8) / elapsed / 1_000_000);
-          }
-          if (h.network) {
-            previousNetwork.current = { sent: h.network.bytes_sent, recv: h.network.bytes_recv, timestamp: now };
-          }
           setSystemStats({
             cpu: typeof h.cpu_usage_percent === 'number' ? h.cpu_usage_percent.toFixed(1) : '--',
-            up: up.toFixed(2),
-            down: down.toFixed(2),
+            up: typeof h.network?.up_mbps === 'number' ? h.network.up_mbps.toFixed(2) : '0.00',
+            down: typeof h.network?.down_mbps === 'number' ? h.network.down_mbps.toFixed(2) : '0.00',
             latency: `${Math.round(performance.now() - started)}`,
           });
         }
       } catch {}
     };
-    load();
-    const t = setInterval(load, 15000);
-    return () => clearInterval(t);
+
+    const token = localStorage.getItem('mview_token');
+    const liveUrl = apiUrl(`/system/live${token ? `?token=${encodeURIComponent(token)}` : ''}`);
+    const eventsSource = new EventSource(liveUrl);
+
+    const handleSnapshot = (event: MessageEvent) => {
+      try {
+        const message = JSON.parse(event.data);
+        applySnapshot(message.payload);
+      } catch {}
+    };
+
+    eventsSource.addEventListener('snapshot', handleSnapshot);
+    eventsSource.onerror = () => {
+      eventsSource.close();
+      load();
+      fallbackTimer = window.setInterval(load, 15000);
+    };
+
+    return () => {
+      eventsSource.close();
+      if (fallbackTimer) window.clearInterval(fallbackTimer);
+    };
   }, []);
 
   const onlineCams = cameras.filter(c => c.status !== 'offline').length;

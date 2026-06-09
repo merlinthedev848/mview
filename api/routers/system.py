@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import asyncio
 import psutil
@@ -7,6 +8,7 @@ import os
 import yaml
 from pathlib import Path
 from api.config import settings
+from api.services.local_core import local_core, sse_pack
 
 router = APIRouter(prefix="/system", tags=["system"])
 
@@ -79,6 +81,10 @@ def _compose_config(data: dict) -> SystemConfigUpdate:
 @router.get("/health")
 async def get_system_health():
     """Retrieve CPU, RAM, and Disk health statistics."""
+    snapshot = await local_core.get_snapshot()
+    if snapshot.get("health"):
+        return snapshot["health"]
+
     cpu_percent = psutil.cpu_percent(interval=None)
     memory = psutil.virtual_memory()
     net = psutil.net_io_counters()
@@ -109,6 +115,35 @@ async def get_system_health():
             "usage_percent": round((used / total) * 100, 2) if total > 0 else 0
         }
     }
+
+
+@router.get("/live")
+async def live_system_state(request: Request):
+    """Stream local appliance state to the UI without repeated API polling."""
+    queue = await local_core.subscribe()
+
+    async def stream():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=20)
+                    yield sse_pack(event)
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        finally:
+            await local_core.unsubscribe(queue)
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/storage-report")

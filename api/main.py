@@ -12,6 +12,7 @@ from api.database import engine, Base
 from api.models.user import User
 from api.routers import cameras, recordings, events, system, auth, users, maps
 from api.services.recorder import recorder_manager
+from api.services.local_core import local_snapshot_worker
 from api.config import settings
 from jose import jwt, JWTError
 
@@ -84,6 +85,7 @@ async def lifespan(app: FastAPI):
 
     # Start retention worker
     background_tasks = [
+        asyncio.create_task(local_snapshot_worker(), name="local-core-snapshot"),
         asyncio.create_task(retention_worker(), name="retention-worker"),
     ]
     from api.services.event_processor import process_mqtt_events
@@ -141,7 +143,7 @@ async def auth_middleware(request: Request, call_next):
         token = None
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.split(" ")[1]
-        elif path.startswith("/recordings/"):
+        elif path.startswith("/recordings/") or path == "/system/live":
             token = request.query_params.get("token")
 
         if not token:

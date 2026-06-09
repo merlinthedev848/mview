@@ -14,6 +14,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 from api.config import settings
+from api.services.local_core import local_core
 
 logger = logging.getLogger("mView-Recorder")
 
@@ -60,6 +61,12 @@ class CameraRecorder:
             except Exception as e:
                 self.restart_count += 1
                 self.last_error = str(e)[-240:]
+                await local_core.publish("recorder_error", {
+                    "camera_id": self.camera_id,
+                    "camera_name": self.camera_name,
+                    "error": self.last_error,
+                    "restart_count": self.restart_count,
+                })
                 logger.warning(f"[{self.camera_name}] Recorder error: {e}. Retrying in {backoff}s...")
             if not self._stop:
                 await asyncio.sleep(backoff)
@@ -231,6 +238,7 @@ class RecorderManager:
                     rec = CameraRecorder(cam.id, cam.name, record_url)
                     self._recorders[cam.id] = rec
                     rec.start()
+                    await local_core.publish("recorder_started", {"camera_id": cam.id, "camera_name": cam.name})
                     logger.info(f"Started recorder for [{cam.name}] → {record_url}")
                     live_url = cam.rtsp_url_sub or cam.rtsp_url_main
                     asyncio.create_task(register_go2rtc_stream(cam.id, live_url))
@@ -245,6 +253,7 @@ class RecorderManager:
                         rec = CameraRecorder(cam.id, cam.name, record_url)
                         self._recorders[cam.id] = rec
                         rec.start()
+                        await local_core.publish("recorder_updated", {"camera_id": cam.id, "camera_name": cam.name})
                         live_url = cam.rtsp_url_sub or cam.rtsp_url_main
                         asyncio.create_task(register_go2rtc_stream(cam.id, live_url))
                         asyncio.create_task(register_go2rtc_stream(f"{cam.id}_main", cam.rtsp_url_main))
