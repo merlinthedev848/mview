@@ -5,6 +5,7 @@ api:
 webrtc:
   listen: ":8555"
   candidates:
+    - sentinel.chriskendall.media:8555
     - "stun:stun.l.google.com:19302"
 
 rtsp:
