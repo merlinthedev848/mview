@@ -202,7 +202,13 @@ const getCurrentUser = (): TokenUser => {
   if (!token) return {};
   try {
     const payload = token.split('.')[1];
-    return JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    return {
+      id: decoded.user_id,
+      username: decoded.sub,
+      role: decoded.role,
+      permissions: decoded.permissions,
+    };
   } catch {
     return {};
   }
