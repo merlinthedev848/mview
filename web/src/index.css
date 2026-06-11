@@ -1644,4 +1644,42 @@ body {
   .speed-panel {
     width: 100%;
   }
+
+  /* Mobile Layout Overrides for Inline Grids */
+  div[style*="display: grid"][style*="gridTemplateColumns"],
+  div[style*="display: grid"][style*="grid-template-columns"] {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* Force multi-column layouts to stack */
+  div[style*="repeat(4, 1fr)"],
+  div[style*="repeat(2, 1fr)"],
+  div[style*="gridTemplateColumns: '1fr 1fr'"],
+  div[style*="gridTemplateColumns: '1fr 1fr 160px'"],
+  div[style*="gridTemplateColumns: '1.2fr 90px 90px 1fr'"],
+  div[style*="gridTemplateColumns: '1fr 1fr auto'"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Form components and dialogs on mobile */
+  .form-group, .form-input, .form-select {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Ensure card paddings are adjusted on mobile */
+  .card {
+    padding: 16px !important;
+  }
+  
+  .card-head {
+    padding: 12px 16px !important;
+  }
+
+  /* Modal responsive sizing */
+  .modal-overlay .card {
+    width: 92% !important;
+    margin: 0 auto;
+  }
 }

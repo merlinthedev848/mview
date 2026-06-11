@@ -24,6 +24,23 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
     pc.addTransceiver('video', { direction: 'recvonly' });
     pc.addTransceiver('audio', { direction: 'recvonly' });
 
+    const fallbackToHls = () => {
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+        videoRef.current.src = go2rtcUrl(`/api/manifest.m3u8?src=${cameraId}`);
+        videoRef.current.load();
+        videoRef.current.play().catch(e => console.log("HLS play error:", e));
+        setIsStreaming(true);
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+        console.warn("WebRTC connection failed/disconnected. Falling back to HLS...");
+        fallbackToHls();
+      }
+    };
+
     pc.ontrack = (event) => {
       if (videoRef.current && videoRef.current.srcObject !== event.streams[0]) {
         videoRef.current.srcObject = event.streams[0];
@@ -45,9 +62,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
         if (response.ok) {
           const answerSdp = await response.text();
           await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+        } else {
+          console.warn("WebRTC offer rejected, falling back to HLS");
+          fallbackToHls();
         }
       } catch (err) {
         console.error("WebRTC Error for camera", cameraId, err);
+        fallbackToHls();
       }
     };
 
@@ -56,6 +77,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
     return () => {
       setIsStreaming(false);
       pc.close();
+      if (videoRef.current) {
+        videoRef.current.src = '';
+      }
     };
   }, [cameraId, status]);
 
