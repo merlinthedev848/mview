@@ -361,9 +361,11 @@ const Playback: React.FC = () => {
   };
 
   // ── 6. UI Mappings ────────────────────────────────────────────────
-  const filteredCameras = cameras.filter(cam =>
-    cam.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredCameras = React.useMemo(() => {
+    return cameras.filter(cam =>
+      cam.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [cameras, searchQuery]);
 
   const recordingSrc = (url: string) => {
     const token = localStorage.getItem('mview_token');
@@ -388,7 +390,7 @@ const Playback: React.FC = () => {
   };
 
   // Generate hourly scale ticks
-  const generateTicks = () => {
+  const timelineTicks = React.useMemo(() => {
     const ticks = [];
     const interval = 30 * 60 * 1000; // 30 minutes
     let start = Math.ceil(timelineStart / interval) * interval;
@@ -397,7 +399,7 @@ const Playback: React.FC = () => {
       start += interval;
     }
     return ticks;
-  };
+  }, [timelineStart, timelineEnd]);
 
   // Categorize events
   const getEventClass = (cls: string) => {
@@ -407,10 +409,12 @@ const Playback: React.FC = () => {
     return 'motion';
   };
 
-  const filteredEvents = events.filter(e => {
-    if (activeFilter === 'all') return true;
-    return getEventClass(e.object_class) === activeFilter;
-  });
+  const filteredEvents = React.useMemo(() => {
+    return events.filter(e => {
+      if (activeFilter === 'all') return true;
+      return getEventClass(e.object_class) === activeFilter;
+    });
+  }, [events, activeFilter]);
 
   return (
     <div className="playback-layout">
@@ -643,7 +647,7 @@ const Playback: React.FC = () => {
 
             {/* Time Axis Ticks */}
             <div className="timeline-ticks-layer">
-              {generateTicks().map((t, idx) => {
+              {timelineTicks.map((t, idx) => {
                 const left = getPercentage(t);
                 return (
                   <React.Fragment key={idx}>

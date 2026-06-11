@@ -82,7 +82,6 @@ def _get_local_subnets() -> list[str]:
     """Detect the local subnets the machine is on."""
     import socket
     import struct
-    import fcntl
     import os
 
     subnets = []

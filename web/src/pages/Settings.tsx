@@ -627,7 +627,7 @@ const Settings: React.FC = () => {
         </div>
 
         {/* Content */}
-        <div className="settings-page-content" style={{ overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 20, paddingRight: 4 }}>
+        <div className="settings-page-content" style={{ overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 20, paddingRight: 4, paddingBottom: 100 }}>
 
           {tab === 'cameras' && (
             <>
@@ -743,7 +743,7 @@ const Settings: React.FC = () => {
                               <svg
                                 viewBox="0 0 1 1"
                                 preserveAspectRatio="none"
-                                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', cursor: draggingPoint ? 'grabbing' : 'crosshair' }}
+                                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', cursor: draggingPoint ? 'grabbing' : 'crosshair', touchAction: 'none' }}
                                 onPointerMove={event => {
                                   if (!draggingPoint) return;
                                   updateZonePoint(draggingPoint.zoneId, draggingPoint.pointIndex, pointFromPointer(event));

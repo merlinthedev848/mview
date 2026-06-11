@@ -1532,7 +1532,7 @@ body {
   .settings-page-layout {
     display: flex !important;
     flex-direction: column !important;
-    padding: 12px !important;
+    padding: 12px 12px 100px !important;
     gap: 12px !important;
     overflow: visible !important;
   }
