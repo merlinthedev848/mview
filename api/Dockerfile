@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY api/requirements.txt ./api/
-RUN pip install --no-cache-dir -r api/requirements.txt
+RUN pip install uv && uv pip install --system --no-cache -r api/requirements.txt
 
 COPY api /app/api
 COPY web/dist /app/web/dist
