@@ -28,7 +28,7 @@ class SemanticEvent(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     
-    camera_id = Column(String, ForeignKey("cameras.id", ondelete="CASCADE"), nullable=False)
+    camera_id = Column(String, ForeignKey("cameras.id", ondelete="CASCADE"), nullable=False, index=True)
     camera = relationship("Camera")
     
     # 512-Dimensional vector from CLIP
@@ -39,4 +39,4 @@ class SemanticEvent(Base):
     
     thumbnail_path = Column(String, nullable=True)
     clip_path = Column(String, nullable=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)

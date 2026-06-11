@@ -120,7 +120,7 @@ class LocalCore:
         storage_path = settings.storage_path
         try:
             total, used, free = shutil.disk_usage(storage_path)
-        except FileNotFoundError:
+        except Exception:
             total, used, free = (0, 0, 0)
 
         now = time.monotonic()
@@ -198,3 +198,4 @@ def _event_payload(event: SemanticEvent) -> dict[str, Any]:
 
 
 local_core = LocalCore()
+

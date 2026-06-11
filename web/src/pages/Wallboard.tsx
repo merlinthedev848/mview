@@ -122,7 +122,7 @@ const Wallboard: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  const columns = cameras.length <= 1 ? 1 : cameras.length <= 4 ? 2 : 3;
+  const columns = Math.ceil(Math.sqrt(cameras.length)) || 1;
 
   if (cameras.length === 0) {
     return (
@@ -146,9 +146,22 @@ const Wallboard: React.FC = () => {
       gap: 2,
       overflow: 'hidden',
     }}>
-      {cameras.map(cam => <WallboardCell key={cam.id} cam={cam} iceServers={iceServers} />)}
+            {cameras.map(cam => <WallboardCell key={cam.id} cam={cam} iceServers={iceServers} />)}
+      <div 
+        style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 1000, opacity: 0.5, transition: 'opacity 0.2s' }}
+        onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+        onMouseLeave={(e) => e.currentTarget.style.opacity = '0.5'}
+      >
+        <button 
+          onClick={() => window.location.href = '/dashboard'}
+          style={{ background: '#ff3b6b', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}
+        >
+          Exit Wallboard
+        </button>
+      </div>
     </div>
   );
 };
 
 export default Wallboard;
+

@@ -26,7 +26,7 @@ class Camera(Base):
     resolution = Column(String, nullable=True)
     
     # Status & Configuration
-    status = Column(String, default="offline") # online, offline, recording, adopting
+    status = Column(String, default="offline", index=True) # online, offline, recording, adopting
     enabled = Column(Boolean, default=True)
     auto_adopted = Column(Boolean, default=False)
     config = Column(JSON, nullable=True) # Custom JSON config for overriding global defaults

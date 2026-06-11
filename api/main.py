@@ -108,7 +108,7 @@ app = FastAPI(title="mView Sentinel", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=os.getenv("FRONTEND_URL", "http://localhost:5173,http://127.0.0.1:5173").split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -121,7 +121,10 @@ async def auth_middleware(request: Request, call_next):
     path = request.url.path
 
     if request.method == "OPTIONS":
-        return await call_next(request)
+        response = await call_next(request)
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
     path_permissions = [
         ("/cameras", {"live", "settings"}),
@@ -160,7 +163,10 @@ async def auth_middleware(request: Request, call_next):
         except JWTError:
             return JSONResponse(status_code=401, content={"detail": "Invalid token"})
             
-    return await call_next(request)
+    response = await call_next(request)
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 # ── API routers ────────────────────────────────────────────────────
 app.include_router(auth.router)
@@ -286,3 +292,4 @@ async def serve_spa(request: Request, full_path: str):
 
     # Graceful fallback if the frontend was never built
     return HTMLResponse(FALLBACK_HTML, status_code=200)
+
