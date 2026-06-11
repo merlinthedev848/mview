@@ -29,6 +29,8 @@ services:
       - RECORD_VIDEO_PRESET=veryfast
     volumes:
       - /mnt/storage/mview/recordings:/mnt/storage/mview/recordings
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/mview-sentinel:/opt/mview-sentinel
     depends_on:
       - postgres
       - redis

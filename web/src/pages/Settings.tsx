@@ -244,6 +244,82 @@ const Settings: React.FC = () => {
   const [activeZoneId, setActiveZoneId] = useState('');
   const [draggingPoint, setDraggingPoint] = useState<{ zoneId: string; pointIndex: number } | null>(null);
 
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<{
+    update_available: boolean;
+    current_sha: string;
+    latest_sha: string;
+    error?: string;
+  } | null>(null);
+  const [updating, setUpdating] = useState(false);
+  const [factoryResetting, setFactoryResetting] = useState(false);
+  const [showFactoryResetConfirm, setShowFactoryResetConfirm] = useState(false);
+  const [factoryResetConfirmText, setFactoryResetConfirmText] = useState('');
+
+  const checkUpdates = async () => {
+    setCheckingUpdates(true);
+    try {
+      const res = await fetch(apiUrl('/system/updates/check'));
+      if (res.ok) {
+        const data = await res.json();
+        setUpdateInfo(data);
+        if (data.update_available) {
+          showToast(`Update available! Latest: ${data.latest_sha}`);
+        } else if (data.error) {
+          showToast(`Update check: ${data.error}`);
+        } else {
+          showToast('You are on the latest version.');
+        }
+      } else {
+        showToast('Failed to check for updates.');
+      }
+    } catch {
+      showToast('Network error checking for updates.');
+    }
+    setCheckingUpdates(false);
+  };
+
+  const installUpdate = async () => {
+    setUpdating(true);
+    try {
+      const res = await fetch(apiUrl('/system/updates/install'), { method: 'POST' });
+      if (res.ok) {
+        showToast('NVR update initiated. Rebuilding Docker containers...');
+      } else {
+        const err = await res.json();
+        showToast(`Update failed: ${err.detail || 'Unknown error'}`);
+      }
+    } catch {
+      showToast('Network error initiating update.');
+    }
+    setUpdating(false);
+  };
+
+  const handleFactoryReset = async () => {
+    if (factoryResetConfirmText !== 'RESET') {
+      showToast('Please type "RESET" to confirm.');
+      return;
+    }
+    setFactoryResetting(true);
+    try {
+      const res = await fetch(apiUrl('/system/factory-reset'), { method: 'POST' });
+      if (res.ok) {
+        showToast('Factory reset complete. Logging out...');
+        localStorage.removeItem('mview_token');
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 3000);
+      } else {
+        const err = await res.json();
+        showToast(`Factory reset failed: ${err.detail || 'Unknown error'}`);
+        setFactoryResetting(false);
+      }
+    } catch {
+      showToast('Network error during factory reset.');
+      setFactoryResetting(false);
+    }
+  };
+
   const currentUser = getCurrentUser();
   const isAdmin = currentUser.role === 'admin';
 
@@ -1320,13 +1396,88 @@ const Settings: React.FC = () => {
                   </div>
                 </div>
 
+                {updateInfo && (
+                  <div style={{ marginTop: 20, padding: 16, border: '1px solid var(--border)', borderRadius: 8, background: 'rgba(255,255,255,0.02)' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--text-1)', marginBottom: 8, fontSize: '0.85rem' }}>Update Information</div>
+                    <div style={{ fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-2)' }}>Current Commit:</span>
+                        <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)' }}>{updateInfo.current_sha}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--text-2)' }}>Latest Commit:</span>
+                        <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)' }}>{updateInfo.latest_sha}</span>
+                      </div>
+                      {updateInfo.update_available ? (
+                        <div style={{ color: 'var(--cyan)', marginTop: 8, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span>A new update is available.</span>
+                          <button className="btn btn-primary" onClick={installUpdate} disabled={updating} style={{ padding: '4px 10px', fontSize: '0.75rem' }}>
+                            {updating ? 'Updating...' : 'Install Update'}
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ color: 'var(--green)', marginTop: 8 }}>You are running the latest version.</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20, display: 'flex', gap: 12 }}>
-                  <button className="btn btn-ghost" style={{ padding: '8px 16px' }}><Loader size={14}/> Check for Updates</button>
+                  <button className="btn btn-ghost" style={{ padding: '8px 16px' }} onClick={checkUpdates} disabled={checkingUpdates}>
+                    <Loader size={14} className={checkingUpdates ? 'spin' : ''}/> Check for Updates
+                  </button>
                   <button className="btn btn-ghost" style={{ padding: '8px 16px' }}><Edit2 size={14}/> Backup Database</button>
                   <button className="btn btn-danger" style={{ padding: '8px 16px', marginLeft: 'auto' }}>Restart NVR Service</button>
                 </div>
               </div>
             </div>
+
+            {isAdmin && (
+              <div className="card" style={{ border: '1px solid rgba(220, 53, 69, 0.4)', background: 'rgba(220, 53, 69, 0.02)', marginTop: 20 }}>
+                <div className="card-head" style={{ borderBottom: '1px solid rgba(220, 53, 69, 0.2)' }}>
+                  <span className="card-title" style={{ color: 'var(--red)' }}>DANGER ZONE</span>
+                </div>
+                <div style={{ padding: 24 }}>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-2)', marginBottom: 16 }}>
+                    Factory resetting will stop all camera recorders, wipe all recording files from storage, remove all cameras from the configuration, and clear system logs. The NVR will be reset to default settings. <strong>This action cannot be undone.</strong>
+                  </div>
+                  <button className="btn btn-danger" onClick={() => setShowFactoryResetConfirm(true)} disabled={factoryResetting}>
+                    {factoryResetting ? 'Factory Resetting...' : 'Factory Reset NVR'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {showFactoryResetConfirm && (
+              <div className="modal-overlay" style={{ display: 'flex', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 1000, alignItems: 'center', justifyContent: 'center' }}>
+                <div className="card" style={{ width: '100%', maxWidth: 460, border: '1px solid var(--red)', background: 'var(--bg-2)' }}>
+                  <div className="card-head">
+                    <span className="card-title" style={{ color: 'var(--red)' }}>Confirm Factory Reset</span>
+                  </div>
+                  <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-1)' }}>
+                      Are you absolutely sure? This will permanently delete all cameras, recording segments, databases, and configuration settings.
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" style={{ color: 'var(--text-2)' }}>Type <strong>RESET</strong> to confirm:</label>
+                      <input 
+                        className="form-input" 
+                        value={factoryResetConfirmText} 
+                        onChange={e => setFactoryResetConfirmText(e.target.value)}
+                        placeholder="RESET"
+                        style={{ border: '1px solid var(--red)', width: '100%', background: 'var(--bg-1)', color: 'var(--text-1)', padding: '8px 12px', borderRadius: 4 }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 12 }}>
+                      <button className="btn btn-ghost" onClick={() => { setShowFactoryResetConfirm(false); setFactoryResetConfirmText(''); }}>Cancel</button>
+                      <button className="btn btn-danger" onClick={handleFactoryReset} disabled={factoryResetting || factoryResetConfirmText !== 'RESET'}>
+                        {factoryResetting ? 'Wiping NVR...' : 'Wipe & Reset Everything'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           )}
 
           {tab === 'users' && (

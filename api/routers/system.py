@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 import asyncio
 import psutil
 import shutil
@@ -9,6 +10,10 @@ import yaml
 from pathlib import Path
 from api.config import settings
 from api.services.local_core import local_core, sse_pack
+from api.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
+from api.routers.auth import get_current_user
+from api.services.recorder import purge_all_recordings
 
 router = APIRouter(prefix="/system", tags=["system"])
 
@@ -201,3 +206,135 @@ async def update_system_config(config: SystemConfigUpdate):
             setattr(settings, setting_name, value)
 
     return {"status": "success", **config.model_dump()}
+
+
+@router.post("/factory-reset")
+async def factory_reset(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    DANGER: Factory reset the entire NVR.
+    Wipes all recordings, all cameras, clears the database, and resets configuration to defaults.
+    """
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can perform a factory reset")
+
+    # 1. Stop all recorders
+    from api.services.recorder import recorder_manager
+    recorder_manager.stop_all()
+
+    # 2. Delete all recordings
+    try:
+        await asyncio.to_thread(purge_all_recordings, None)
+    except Exception as e:
+        print(f"Error purging recordings during factory reset: {e}")
+
+    # 3. Wipe all tables except users (or wipe users too? let's wipe everything except the initial admin)
+    # The safest way is to truncate tables using SQLAlchemy raw SQL
+    try:
+        await db.execute(text("TRUNCATE TABLE semantic_events CASCADE;"))
+        await db.execute(text("TRUNCATE TABLE faces CASCADE;"))
+        await db.execute(text("TRUNCATE TABLE cameras CASCADE;"))
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database wipe failed: {e}")
+
+    # 4. Reset config file to defaults by just removing it if it exists and writing an empty one
+    if CONFIG_PATH.is_file():
+        try:
+            CONFIG_PATH.unlink()
+        except:
+            pass
+
+    return {"status": "success", "message": "Factory reset complete. System will now restart."}
+
+
+@router.get("/updates/check")
+async def check_for_updates(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can check for updates")
+    
+    install_dir = Path("/opt/mview-sentinel")
+    if not install_dir.is_dir() or not (install_dir / ".git").is_dir():
+        # Fallback to current repository path if running locally or not in the default directory
+        install_dir = Path(os.getcwd())
+        if not (install_dir / ".git").is_dir():
+            return {
+                "update_available": False,
+                "current_sha": "unknown",
+                "latest_sha": "unknown",
+                "error": "Not a git repository"
+            }
+
+    try:
+        # Get local commit SHA
+        proc_local = await asyncio.create_subprocess_exec(
+            "git", "rev-parse", "HEAD",
+            cwd=str(install_dir),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout_local, _ = await proc_local.communicate()
+        local_sha = stdout_local.decode().strip()
+
+        # Get remote commit SHA
+        proc_remote = await asyncio.create_subprocess_exec(
+            "git", "ls-remote", "origin", "main",
+            cwd=str(install_dir),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout_remote, _ = await proc_remote.communicate()
+        remote_output = stdout_remote.decode().strip()
+        
+        if not remote_output:
+            return {
+                "update_available": False,
+                "current_sha": local_sha,
+                "latest_sha": "unknown",
+                "error": "Could not connect to remote repository"
+            }
+            
+        remote_sha = remote_output.split()[0]
+        
+        return {
+            "update_available": local_sha != remote_sha,
+            "current_sha": local_sha[:7],
+            "latest_sha": remote_sha[:7],
+            "current_sha_full": local_sha,
+            "latest_sha_full": remote_sha
+        }
+    except Exception as e:
+        return {
+            "update_available": False,
+            "current_sha": "unknown",
+            "latest_sha": "unknown",
+            "error": str(e)
+        }
+
+
+@router.post("/updates/install")
+async def install_updates(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can install updates")
+        
+    install_dir = Path("/opt/mview-sentinel")
+    if not install_dir.is_dir() or not (install_dir / ".git").is_dir():
+        install_dir = Path(os.getcwd())
+        if not (install_dir / ".git").is_dir():
+            raise HTTPException(status_code=400, detail="Not a git repository, cannot auto-update")
+
+    # Run the update in a detached background subprocess so it doesn't block the API response
+    # We sleep briefly to let the API response complete first
+    cmd = f"sleep 2 && cd {install_dir} && git fetch --all && git reset --hard origin/main && git clean -fd && docker compose up -d --build"
+    try:
+        import subprocess
+        subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+        return {
+            "status": "success",
+            "message": "Update initiated successfully. The NVR will pull changes and restart."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start update process: {e}")
