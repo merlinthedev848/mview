@@ -167,10 +167,19 @@ async def adopt_camera(
     db: AsyncSession = Depends(get_db),
 ):
     """Probe a discovered device for RTSP streams, then save it."""
-    import asyncio
+    import urllib.parse
+    port = 80
+    if data.onvif_endpoint:
+        try:
+            parsed = urllib.parse.urlparse(data.onvif_endpoint)
+            if parsed.port:
+                port = parsed.port
+        except Exception:
+            pass
+
     streams = await asyncio.to_thread(
         onvif_service.get_camera_streams,
-        data.ip, 80, username, password
+        data.ip, port, username, password
     )
 
     if streams:
