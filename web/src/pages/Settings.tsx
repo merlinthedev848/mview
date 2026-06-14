@@ -236,6 +236,9 @@ const Settings: React.FC = () => {
   const [savingConfig, setSavingConfig] = useState(false);
   const [users, setUsers] = useState<UserAccount[]>([]);
   const [usersError, setUsersError] = useState('');
+  const [editingUser, setEditingUser] = useState<UserAccount | null>(null);
+  const [editUserForm, setEditUserForm] = useState({ username: '', password: '', role: 'viewer', permissions: [] as string[] });
+  const [savingEditUser, setSavingEditUser] = useState(false);
   const [newUser, setNewUser] = useState({ username: '', password: '', role: 'viewer', permissions: ['live'] as string[] });
   const [passwordForm, setPasswordForm] = useState({ current_password: '', new_password: '' });
   const [savingPassword, setSavingPassword] = useState(false);
@@ -506,6 +509,51 @@ const Settings: React.FC = () => {
       showToast('Network error while changing password.');
     }
     setSavingPassword(false);
+  };
+
+  const startEditUser = (user: UserAccount) => {
+    setEditingUser(user);
+    setEditUserForm({
+      username: user.username,
+      password: '',
+      role: user.role,
+      permissions: [...user.permissions]
+    });
+  };
+
+  const saveEditUser = async () => {
+    if (!editingUser) return;
+    if (!editUserForm.username.trim()) {
+      showToast('Username is required.');
+      return;
+    }
+    setSavingEditUser(true);
+    try {
+      const payload: any = {
+        username: editUserForm.username,
+        role: editUserForm.role,
+        permissions: editUserForm.permissions
+      };
+      if (editUserForm.password.trim()) {
+        payload.password = editUserForm.password;
+      }
+      const res = await fetch(apiUrl(`/users/${editingUser.id}`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setEditingUser(null);
+        await fetchUsers();
+        showToast('User updated successfully.');
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast(err.detail || 'Failed to update user.');
+      }
+    } catch {
+      showToast('Network error while updating user.');
+    }
+    setSavingEditUser(false);
   };
 
   const showToast = (msg: string) => {
@@ -1484,6 +1532,87 @@ const Settings: React.FC = () => {
                 </div>
               </div>
             )}
+
+            {editingUser && (
+              <div className="modal-overlay" style={{ display: 'flex', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 1000, alignItems: 'center', justifyContent: 'center' }}>
+                <div className="card" style={{ width: '100%', maxWidth: 500, background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                  <div className="card-head">
+                    <span className="card-title">Edit User: {editingUser.username}</span>
+                  </div>
+                  <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div className="form-group">
+                      <label className="form-label">Username</label>
+                      <input 
+                        className="form-input" 
+                        value={editUserForm.username} 
+                        onChange={e => setEditUserForm(f => ({ ...f, username: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">New Password (leave blank to keep current)</label>
+                      <input 
+                        className="form-input" 
+                        type="password"
+                        value={editUserForm.password} 
+                        onChange={e => setEditUserForm(f => ({ ...f, password: e.target.value }))}
+                        placeholder="Enter new password"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Role</label>
+                      <select
+                        className="form-select"
+                        value={editUserForm.role}
+                        onChange={e => {
+                          const role = e.target.value;
+                          setEditUserForm(f => ({
+                            ...f,
+                            role,
+                            permissions: role === 'admin' ? ['live', 'playback', 'events', 'settings'] : f.permissions,
+                          }));
+                        }}
+                      >
+                        <option value="viewer">Viewer</option>
+                        <option value="operator">Operator</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label" style={{ marginBottom: 8 }}>Permissions</label>
+                      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                        {['live', 'playback', 'events', 'settings'].map(permission => (
+                          <label key={permission} style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-2)', fontSize: '0.8rem', textTransform: 'capitalize', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={editUserForm.permissions.includes(permission)}
+                              disabled={editUserForm.role === 'admin'}
+                              onChange={e => setEditUserForm(f => ({
+                                ...f,
+                                permissions: e.target.checked
+                                  ? Array.from(new Set([...f.permissions, permission]))
+                                  : f.permissions.filter(p => p !== permission),
+                              }))}
+                              style={{ width: 16, height: 16, accentColor: 'var(--cyan)' }}
+                            />
+                            {permission}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 12 }}>
+                      <button className="btn btn-ghost" onClick={() => setEditingUser(null)}>Cancel</button>
+                      <button className="btn btn-primary" onClick={saveEditUser} disabled={savingEditUser}>
+                        {savingEditUser ? 'Saving...' : 'Save Changes'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           )}
 
           {tab === 'users' && (
@@ -1621,14 +1750,23 @@ const Settings: React.FC = () => {
                           }}>
                             {user.role}
                           </span>
-                          <button
-                            className="btn btn-danger"
-                            style={{ padding: '6px 10px' }}
-                            disabled={user.username === 'admin' || user.id === currentUser.id}
-                            onClick={() => deleteUser(user.id)}
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button
+                              className="btn btn-ghost"
+                              style={{ padding: '6px 10px', color: 'var(--text-2)', border: '1px solid var(--border)' }}
+                              onClick={() => startEditUser(user)}
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button
+                              className="btn btn-danger"
+                              style={{ padding: '6px 10px' }}
+                              disabled={user.username === 'admin' || user.id === currentUser.id}
+                              onClick={() => deleteUser(user.id)}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </div>
                       ))
                     )}

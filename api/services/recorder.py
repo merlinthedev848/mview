@@ -295,7 +295,7 @@ def list_recordings(camera_id: str | None = None) -> list[dict]:
 
     cam_dirs = [base / camera_id] if camera_id else [d for d in base.iterdir() if d.is_dir()]
 
-    max_results = 1000
+    max_results = 50000
     for cam_dir in cam_dirs:
         if not cam_dir.exists():
             continue

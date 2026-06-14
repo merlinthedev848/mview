@@ -36,6 +36,13 @@ class PasswordUpdate(BaseModel):
     new_password: str = Field(min_length=4, max_length=256)
 
 
+class UserUpdate(BaseModel):
+    username: str | None = Field(None, min_length=2, max_length=64)
+    role: Role | None = None
+    permissions: list[Permission] | None = None
+    password: str | None = Field(None, min_length=4, max_length=256)
+
+
 def _admin_permissions(role: str, permissions: list[str]) -> list[str]:
     return ["live", "playback", "events", "settings"] if role == "admin" else permissions
 
@@ -133,3 +140,39 @@ async def update_password(
     user.hashed_password = get_password_hash(payload.new_password)
     await db.commit()
     return {"status": "updated"}
+
+
+@router.patch("/{user_id}", response_model=UserResponse)
+async def update_user(
+    user_id: str,
+    payload: UserUpdate,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_admin(current_user)
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if payload.username is not None:
+        username = payload.username.strip()
+        if username != user.username:
+            existing = await db.execute(select(User).where(User.username == username))
+            if existing.scalar_one_or_none():
+                raise HTTPException(status_code=409, detail="Username already exists")
+            user.username = username
+
+    if payload.role is not None:
+        user.role = payload.role
+
+    if payload.permissions is not None:
+        user.permissions = _admin_permissions(user.role, list(payload.permissions))
+    elif payload.role is not None:
+        user.permissions = _admin_permissions(user.role, list(user.permissions or []))
+
+    if payload.password is not None:
+        user.hashed_password = get_password_hash(payload.password)
+
+    await db.commit()
+    await db.refresh(user)
+    return _serialize(user)

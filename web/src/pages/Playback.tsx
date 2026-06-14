@@ -70,6 +70,10 @@ const Playback: React.FC = () => {
   const [timelineStart, setTimelineStart] = useState<number>(Date.now() - 3 * 3600 * 1000);
   const [timelineEnd, setTimelineEnd] = useState<number>(Date.now() + 3 * 3600 * 1000);
 
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef<{ x: number; start: number; end: number } | null>(null);
+  const hasDraggedRef = useRef(false);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const pendingSeek = useRef<number | null>(null);
@@ -104,7 +108,7 @@ const Playback: React.FC = () => {
       try {
         const [recRes, eventRes] = await Promise.all([
           fetch(apiUrl(`/recordings-list?camera_id=${selectedCam.id}`)),
-          fetch(apiUrl(`/events?camera_id=${selectedCam.id}&limit=200`))
+          fetch(apiUrl(`/events?camera_id=${selectedCam.id}&limit=5000`))
         ]);
 
         let recs: RecordingFile[] = [];
@@ -174,16 +178,53 @@ const Playback: React.FC = () => {
     }
   }, [speedIndex, activeFile]);
 
-  const seekToTime = (targetTimeMs: number) => {
-    // Find the file containing this time
-    const file = recordings.find(r => targetTimeMs >= r.startTimestamp && targetTimeMs <= r.endTimestamp);
+  const seekToTime = (targetTimeMs: number, findNearest: boolean = false) => {
+    if (recordings.length === 0) return false;
+
+    // 1. Try to find the exact segment
+    let file = recordings.find(r => targetTimeMs >= r.startTimestamp && targetTimeMs <= r.endTimestamp);
+    let seekTargetMs = targetTimeMs;
+
+    // 2. Fallback to nearest segment if findNearest is true
+    if (!file && findNearest) {
+      let minDiff = Infinity;
+      let closestFile = null;
+
+      for (const r of recordings) {
+        const diffStart = Math.abs(r.startTimestamp - targetTimeMs);
+        const diffEnd = Math.abs(r.endTimestamp - targetTimeMs);
+        const minLocalDiff = Math.min(diffStart, diffEnd);
+
+        if (minLocalDiff < minDiff) {
+          minDiff = minLocalDiff;
+          closestFile = r;
+        }
+      }
+
+      if (closestFile) {
+        file = closestFile;
+        if (targetTimeMs < closestFile.startTimestamp) {
+          seekTargetMs = closestFile.startTimestamp;
+        } else {
+          seekTargetMs = closestFile.endTimestamp - 500; // 0.5s before end
+        }
+      }
+    }
+
     if (file) {
-      const offsetSeconds = (targetTimeMs - file.startTimestamp) / 1000;
+      const offsetSeconds = (seekTargetMs - file.startTimestamp) / 1000;
       setActiveFile(file);
-      setCurrentTimeMs(targetTimeMs);
+      setCurrentTimeMs(seekTargetMs);
       setVideoError('');
       setBuffering(true);
-      
+
+      // Auto-center timeline if target is off-screen
+      if (seekTargetMs < timelineStart || seekTargetMs > timelineEnd) {
+        const span = timelineEnd - timelineStart;
+        setTimelineStart(seekTargetMs - span / 2);
+        setTimelineEnd(seekTargetMs + span / 2);
+      }
+
       if (videoRef.current) {
         if (videoRef.current.src.includes(file.url)) {
           const duration = videoRef.current.duration;
@@ -214,11 +255,17 @@ const Playback: React.FC = () => {
     const updatedTimeMs = activeFile.startTimestamp + currentVideoTime * 1000;
     setCurrentTimeMs(updatedTimeMs);
 
-    // If playhead goes beyond the timeline window, slide the timeline forward
+    // Slide timeline forward if playhead is near the end
     if (updatedTimeMs > timelineEnd - 30 * 1000) {
       const span = timelineEnd - timelineStart;
       setTimelineStart(updatedTimeMs - span * 0.1);
       setTimelineEnd(updatedTimeMs + span * 0.9);
+    }
+    // Slide timeline backward if playhead is near or before the start
+    else if (updatedTimeMs < timelineStart + 30 * 1000) {
+      const span = timelineEnd - timelineStart;
+      setTimelineStart(updatedTimeMs - span * 0.9);
+      setTimelineEnd(updatedTimeMs + span * 0.1);
     }
   };
 
@@ -338,14 +385,121 @@ const Playback: React.FC = () => {
     }
   };
 
-  // ── 5. Timeline Click coordinates mapping ─────────────────────────
+  // ── 5. Timeline Click & Drag & Zoom handlers ─────────────────────────
   const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (hasDraggedRef.current) {
+      hasDraggedRef.current = false;
+      return;
+    }
     if (!timelineRef.current) return;
     const rect = timelineRef.current.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const clickRatio = clickX / rect.width;
     const targetTime = timelineStart + clickRatio * (timelineEnd - timelineStart);
-    seekToTime(targetTime);
+    seekToTime(targetTime, true);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    dragStartRef.current = {
+      x: e.clientX,
+      start: timelineStart,
+      end: timelineEnd
+    };
+    setIsDragging(true);
+    hasDraggedRef.current = false;
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!dragStartRef.current || !timelineRef.current) return;
+    const deltaX = e.clientX - dragStartRef.current.x;
+    if (Math.abs(deltaX) > 5) {
+      hasDraggedRef.current = true;
+    }
+    if (isDragging) {
+      const rect = timelineRef.current.getBoundingClientRect();
+      const timeSpan = dragStartRef.current.end - dragStartRef.current.start;
+      const deltaMs = (deltaX / rect.width) * timeSpan;
+      setTimelineStart(dragStartRef.current.start - deltaMs);
+      setTimelineEnd(dragStartRef.current.end - deltaMs);
+    }
+  };
+
+  const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isDragging) {
+      setIsDragging(false);
+      dragStartRef.current = null;
+      e.preventDefault();
+    }
+  };
+
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (!timelineRef.current) return;
+    const zoomFactor = e.deltaY > 0 ? 1.15 : 0.85;
+    const rect = timelineRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseRatio = mouseX / rect.width;
+    const currentSpan = timelineEnd - timelineStart;
+    const newSpan = currentSpan * zoomFactor;
+    const targetTime = timelineStart + mouseRatio * currentSpan;
+    const newStart = targetTime - mouseRatio * newSpan;
+    const newEnd = newStart + newSpan;
+
+    const minSpan = 10 * 1000;
+    const maxSpan = 7 * 24 * 3600 * 1000;
+    if (newSpan >= minSpan && newSpan <= maxSpan) {
+      setTimelineStart(newStart);
+      setTimelineEnd(newEnd);
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 1) return;
+    dragStartRef.current = {
+      x: e.touches[0].clientX,
+      start: timelineStart,
+      end: timelineEnd
+    };
+    setIsDragging(true);
+    hasDraggedRef.current = false;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!dragStartRef.current || !timelineRef.current) return;
+    const deltaX = e.touches[0].clientX - dragStartRef.current.x;
+    if (Math.abs(deltaX) > 5) {
+      hasDraggedRef.current = true;
+    }
+    if (isDragging) {
+      const rect = timelineRef.current.getBoundingClientRect();
+      const timeSpan = dragStartRef.current.end - dragStartRef.current.start;
+      const deltaMs = (deltaX / rect.width) * timeSpan;
+      setTimelineStart(dragStartRef.current.start - deltaMs);
+      setTimelineEnd(dragStartRef.current.end - deltaMs);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+    dragStartRef.current = null;
+  };
+
+  const zoomIn = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const currentSpan = timelineEnd - timelineStart;
+    const newSpan = currentSpan * 0.7;
+    const center = timelineStart + currentSpan / 2;
+    setTimelineStart(center - newSpan / 2);
+    setTimelineEnd(center + newSpan / 2);
+  };
+
+  const zoomOut = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const currentSpan = timelineEnd - timelineStart;
+    const newSpan = Math.min(currentSpan * 1.5, 7 * 24 * 3600 * 1000);
+    const center = timelineStart + currentSpan / 2;
+    setTimelineStart(center - newSpan / 2);
+    setTimelineEnd(center + newSpan / 2);
   };
 
   const handleJumpToTime = () => {
@@ -357,7 +511,7 @@ const Playback: React.FC = () => {
     }
     setTimelineStart(target - 3 * 3600 * 1000);
     setTimelineEnd(target + 3 * 3600 * 1000);
-    seekToTime(target);
+    seekToTime(target, true);
   };
 
   // ── 6. UI Mappings ────────────────────────────────────────────────
@@ -556,6 +710,10 @@ const Playback: React.FC = () => {
           <div className="playback-timeline-header">
             <h3 className="playback-timeline-title">Smart Playback Timeline</h3>
             <div className="playback-timeline-filters">
+              {/* Zoom Buttons */}
+              <button className="filter-btn all" onClick={zoomIn} title="Zoom In (Scroll to zoom)" style={{ marginRight: 6 }}>Zoom +</button>
+              <button className="filter-btn all" onClick={zoomOut} title="Zoom Out (Scroll to zoom)" style={{ marginRight: 18 }}>Zoom -</button>
+
               <button 
                 className={`filter-btn all${activeFilter === 'all' ? ' active' : ''}`}
                 onClick={() => setActiveFilter('all')}
@@ -588,6 +746,15 @@ const Playback: React.FC = () => {
             className="timeline-viewport" 
             ref={timelineRef}
             onClick={handleTimelineClick}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onWheel={handleWheel}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
           >
             {/* Lane Separators */}
             <div className="timeline-track-separator t1" />
