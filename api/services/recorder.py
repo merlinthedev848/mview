@@ -299,18 +299,57 @@ def list_recordings(camera_id: str | None = None) -> list[dict]:
     for cam_dir in cam_dirs:
         if not cam_dir.exists():
             continue
-        for f in sorted(cam_dir.glob("*.mp4"), reverse=True):
-            stat = f.stat()
-            age_seconds = (datetime.now() - datetime.fromtimestamp(stat.st_mtime)).total_seconds()
-            if stat.st_size == 0 or age_seconds < 12:
-                continue
+        try:
+            entries = [entry for entry in os.scandir(cam_dir) if entry.is_file() and entry.name.endswith(".mp4")]
+        except OSError:
+            continue
+
+        entries.sort(key=lambda x: x.name, reverse=True)
+
+        for i, entry in enumerate(entries):
+            match = re.match(r"(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})", entry.name)
+
+            if i < 5:
+                try:
+                    stat = entry.stat()
+                    age_seconds = (datetime.now() - datetime.fromtimestamp(stat.st_mtime)).total_seconds()
+                    if stat.st_size == 0 or age_seconds < 12:
+                        continue
+                    mtime = stat.st_mtime
+                    size_mb = round(stat.st_size / 1_048_576, 1)
+                except OSError:
+                    continue
+            else:
+                mtime = None
+                size_mb = 10.0
+
+            if match:
+                y, m, d, hr, min, sec = match.groups()
+                try:
+                    dt = datetime(int(y), int(m), int(d), int(hr), int(min), int(sec))
+                    created_at = dt.isoformat()
+                except ValueError:
+                    if mtime is None:
+                        try:
+                            mtime = entry.stat().st_mtime
+                        except OSError:
+                            continue
+                    created_at = datetime.fromtimestamp(mtime).isoformat()
+            else:
+                if mtime is None:
+                    try:
+                        mtime = entry.stat().st_mtime
+                    except OSError:
+                        continue
+                created_at = datetime.fromtimestamp(mtime).isoformat()
+
             results.append({
                 "camera_id": cam_dir.name,
-                "filename": f.name,
-                "path": str(f),
-                "size_mb": round(stat.st_size / 1_048_576, 1),
-                "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                "url": f"/recordings/{cam_dir.name}/{f.name}",
+                "filename": entry.name,
+                "path": entry.path,
+                "size_mb": size_mb,
+                "created_at": created_at,
+                "url": f"/recordings/{cam_dir.name}/{entry.name}",
             })
             if len(results) >= max_results:
                 return results

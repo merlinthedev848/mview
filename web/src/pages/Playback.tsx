@@ -115,22 +115,37 @@ const Playback: React.FC = () => {
         if (recRes.ok) {
           const rawRecs = await recRes.json();
           recs = rawRecs.map((r: any) => {
-            // Parse start timestamp from filename: YYYY-MM-DD_HH-MM-SS.mp4
             const match = r.filename.match(/(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})/);
-            let start = new Date(r.created_at).getTime();
+            let start = 0;
             if (match) {
               const [_, y, m, d, hr, min, sec] = match;
               start = new Date(parseInt(y), parseInt(m) - 1, parseInt(d), parseInt(hr), parseInt(min), parseInt(sec)).getTime();
+            } else {
+              start = new Date(r.created_at).getTime();
             }
-            // Calculate end timestamp dynamically based on the modification time
-            // to show the actual recording duration instead of hardcoded 1 hour.
-            const end = Math.max(start + 5000, new Date(r.created_at).getTime());
             return {
               ...r,
               startTimestamp: start,
-              endTimestamp: end
+              endTimestamp: start + 60000
             };
-          }).sort((a: any, b: any) => a.startTimestamp - b.startTimestamp);
+          });
+
+          // Sort by startTimestamp ascending
+          recs.sort((a, b) => a.startTimestamp - b.startTimestamp);
+
+          // Calculate gapless/accurate endTimestamp to display continuous footage
+          for (let i = 0; i < recs.length; i++) {
+            const start = recs[i].startTimestamp;
+            let end = start + 60000;
+            if (i < recs.length - 1) {
+              const nextStart = recs[i + 1].startTimestamp;
+              const gap = nextStart - start;
+              if (gap > 0 && gap <= 120000) {
+                end = nextStart;
+              }
+            }
+            recs[i].endTimestamp = end;
+          }
           setRecordings(recs);
         }
 
@@ -270,6 +285,9 @@ const Playback: React.FC = () => {
   };
 
   const handleLoadedMetadata = () => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = speeds[speedIndex];
+    }
     if (pendingSeek.current !== null && videoRef.current) {
       const duration = videoRef.current.duration;
       const clampSeek = Math.min(pendingSeek.current, duration > 0.5 ? duration - 0.5 : 0);
