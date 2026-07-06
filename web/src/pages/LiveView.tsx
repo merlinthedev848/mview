@@ -9,6 +9,8 @@ import {
   Mic,
   Video,
   WifiOff,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { apiUrl, go2rtcUrl } from '../lib/endpoints';
@@ -80,9 +82,21 @@ const CameraFeedComponent: React.FC<{
   onMaximize?: () => void;
 }> = ({ cam, iceServers, analytics = false, maximized = false, paused = false, onMaximize }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [connected, setConnected] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
   const streamName = maximized ? `${cam.id}_main` : cam.rtsp_url_sub ? `${cam.id}_sub` : cam.id;
+
+  // Tools states
+  const [isMuted, setIsMuted] = useState(true);
+  const [isMicActive, setIsMicActive] = useState(false);
+  const [isZoomMode, setIsZoomMode] = useState(false);
+  const [zoomScale, setZoomScale] = useState(1);
+  const [zoomOffset, setZoomOffset] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+
+  const panStart = useRef({ x: 0, y: 0 });
+  const micStreamRef = useRef<MediaStream | null>(null);
 
   const iceServersKey = useMemo(() => JSON.stringify(iceServers), [iceServers]);
 
@@ -113,6 +127,13 @@ const CameraFeedComponent: React.FC<{
     pc = new RTCPeerConnection({ iceServers });
 
     pc.addTransceiver('video', { direction: 'recvonly' });
+    pc.addTransceiver('audio', { direction: 'recvonly' });
+
+    if (isMicActive && micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach(track => {
+        pc?.addTrack(track, micStreamRef.current!);
+      });
+    }
 
     pc.onconnectionstatechange = () => {
       if (pc) {
@@ -167,7 +188,7 @@ const CameraFeedComponent: React.FC<{
       if (pc) pc.close();
       setConnected(false);
     };
-  }, [cam.id, cam.name, cam.status, cam.rtsp_url_main, streamName, iceServersKey]);
+  }, [cam.id, cam.name, cam.status, cam.rtsp_url_main, streamName, isMicActive, retryNonce, iceServersKey]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -176,10 +197,110 @@ const CameraFeedComponent: React.FC<{
     else video.play().catch(() => {});
   }, [paused]);
 
+  useEffect(() => {
+    return () => {
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
+
+  // 1. Fullscreen
+  const handleFullscreen = () => {
+    if (containerRef.current) {
+      if (containerRef.current.requestFullscreen) {
+        containerRef.current.requestFullscreen();
+      } else if ((containerRef.current as any).webkitRequestFullscreen) {
+        (containerRef.current as any).webkitRequestFullscreen();
+      }
+    }
+  };
+
+  // 2. Snapshot capture
+  const handleSnapshot = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 1920;
+    canvas.height = video.videoHeight || 1080;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const url = canvas.toDataURL('image/jpeg');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `snapshot_${cam.name.replace(/\s+/g, '_')}_${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`;
+      a.click();
+    }
+  };
+
+  // 3. Two-Way Mic Talk
+  const toggleMic = async () => {
+    if (isMicActive) {
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach(track => track.stop());
+        micStreamRef.current = null;
+      }
+      setIsMicActive(false);
+      setRetryNonce(n => n + 1);
+    } else {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micStreamRef.current = stream;
+        setIsMicActive(true);
+        setRetryNonce(n => n + 1);
+      } catch (err) {
+        console.error("Failed to access mic:", err);
+        alert("Microphone access denied or not supported.");
+      }
+    }
+  };
+
+  // 4. Digital PTZ handlers
+  const handleZoomWheel = (e: React.WheelEvent) => {
+    if (!isZoomMode) return;
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.25 : -0.25;
+    setZoomScale(s => Math.min(Math.max(1, s + delta), 8));
+  };
+
+  const handleZoomMouseDown = (e: React.MouseEvent) => {
+    if (!isZoomMode || zoomScale === 1) return;
+    setIsPanning(true);
+    panStart.current = { x: e.clientX - zoomOffset.x, y: e.clientY - zoomOffset.y };
+  };
+
+  const handleZoomMouseMove = (e: React.MouseEvent) => {
+    if (!isPanning) return;
+    const x = e.clientX - panStart.current.x;
+    const y = e.clientY - panStart.current.y;
+    setZoomOffset({ x, y });
+  };
+
+  const handleZoomMouseUp = () => {
+    setIsPanning(false);
+  };
+
+  const toggleZoomMode = () => {
+    setIsZoomMode(!isZoomMode);
+    setZoomScale(1);
+    setZoomOffset({ x: 0, y: 0 });
+    setIsPanning(false);
+  };
+
   const isOffline = cam.status === 'offline';
 
   return (
-    <div className={`cam-cell${cam.has_motion || analytics ? ' has-motion' : ''}`}>
+    <div 
+      ref={containerRef}
+      className={`cam-cell${cam.has_motion || analytics ? ' has-motion' : ''}`}
+      onWheel={handleZoomWheel}
+      onMouseDown={handleZoomMouseDown}
+      onMouseMove={handleZoomMouseMove}
+      onMouseUp={handleZoomMouseUp}
+      onMouseLeave={handleZoomMouseUp}
+      style={{ overflow: 'hidden', position: 'relative' }}
+    >
       <div className="cam-top">
         <div>
           <div className="cam-name">{cam.name}</div>
@@ -198,7 +319,21 @@ const CameraFeedComponent: React.FC<{
         </div>
       ) : (
         <>
-          <video ref={videoRef} autoPlay playsInline muted />
+          <video 
+            ref={videoRef} 
+            autoPlay 
+            playsInline 
+            muted={isMuted} 
+            style={{ 
+              width: '100%', 
+              height: '100%', 
+              objectFit: 'cover',
+              transform: isZoomMode ? `scale(${zoomScale}) translate(${zoomOffset.x}px, ${zoomOffset.y}px)` : 'none',
+              transformOrigin: 'center center',
+              transition: isPanning ? 'none' : 'transform 0.1s ease',
+              cursor: isZoomMode ? (isPanning ? 'grabbing' : 'grab') : 'default'
+            }} 
+          />
           {!connected && (
             <div className="cam-connecting">
               <div className="spinner" />
@@ -215,12 +350,75 @@ const CameraFeedComponent: React.FC<{
         </>
       )}
 
-      <div className="cam-bottom">
-        <button className="cam-btn" title="Focus"><Focus size={12} /></button>
-        <button className="cam-btn" title="Audio"><Mic size={12} /></button>
-        <button className="cam-btn" title="Snapshot"><CamIcon size={12} /></button>
-        <button className="cam-btn" title="Maximize" onClick={onMaximize}><Maximize2 size={12} /></button>
-        {connected && <span className="cam-info">WebRTC - {cam.rtsp_url_sub && !maximized ? 'Substream' : 'Main'}</span>}
+      {isZoomMode && (
+        <div style={{
+          position: 'absolute',
+          top: '40px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(0,0,0,0.85)',
+          border: '1px solid var(--surface-border)',
+          color: '#fff',
+          padding: '3px 8px',
+          borderRadius: '20px',
+          fontSize: '0.65rem',
+          zIndex: 10,
+          pointerEvents: 'none'
+        }}>
+          PTZ Active: Scroll to zoom, drag to pan
+        </div>
+      )}
+
+      <div className="cam-bottom" style={{ zIndex: 10 }}>
+        {/* Focus Mode (Digital Zoom) */}
+        <button 
+          className="cam-btn" 
+          onClick={toggleZoomMode} 
+          style={{ color: isZoomMode ? 'var(--cyan)' : 'inherit' }}
+          title="Digital Zoom / Focus"
+        >
+          <Focus size={12} />
+        </button>
+
+        {/* Listen / Unmute */}
+        <button 
+          className="cam-btn" 
+          onClick={() => setIsMuted(!isMuted)} 
+          style={{ color: !isMuted ? 'var(--cyan)' : 'inherit' }}
+          title={isMuted ? "Listen" : "Mute"}
+        >
+          {isMuted ? <VolumeX size={12} /> : <Volume2 size={12} />}
+        </button>
+
+        {/* Two-Way Audio talk */}
+        <button 
+          className="cam-btn" 
+          onClick={toggleMic} 
+          style={{ color: isMicActive ? 'var(--pink)' : 'inherit' }}
+          title={isMicActive ? "Mic Active" : "Two-Way Microphone Talk"}
+        >
+          <Mic size={12} />
+        </button>
+
+        {/* Snapshot Capture */}
+        <button 
+          className="cam-btn" 
+          onClick={handleSnapshot} 
+          title="Take Snapshot"
+        >
+          <CamIcon size={12} />
+        </button>
+
+        {/* Fullscreen Mode */}
+        <button 
+          className="cam-btn" 
+          onClick={handleFullscreen} 
+          title="Fullscreen"
+        >
+          <Maximize2 size={12} />
+        </button>
+
+        {connected && <span className="cam-info">{isMicActive ? 'WebRTC Talk' : 'WebRTC'} - {cam.rtsp_url_sub && !maximized ? 'Sub' : 'Main'}</span>}
       </div>
     </div>
   );

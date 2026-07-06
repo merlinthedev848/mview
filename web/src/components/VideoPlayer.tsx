@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, Maximize, Mic, Video as VideoIcon, Activity, Focus } from 'lucide-react';
+import { Camera, Maximize, Mic, Video as VideoIcon, Activity, Focus, Volume2, VolumeX } from 'lucide-react';
 import { go2rtcUrl } from '../lib/endpoints';
 
 interface VideoPlayerProps {
@@ -12,8 +12,22 @@ interface VideoPlayerProps {
 const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMotion = false }) => {
   const [isHovered, setIsHovered] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [isStreaming, setIsStreaming] = useState(false);
 
+  // States for tools
+  const [isMuted, setIsMuted] = useState(true);
+  const [isMicActive, setIsMicActive] = useState(false);
+  const [isZoomMode, setIsZoomMode] = useState(false);
+  const [zoomScale, setZoomScale] = useState(1);
+  const [zoomOffset, setZoomOffset] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
+
+  const panStart = useRef({ x: 0, y: 0 });
+  const micStreamRef = useRef<MediaStream | null>(null);
+
+  // WebRTC Connection Setup
   useEffect(() => {
     if (status === 'offline') return;
 
@@ -43,6 +57,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
 
     pc.addTransceiver('video', { direction: 'recvonly' });
     pc.addTransceiver('audio', { direction: 'recvonly' });
+
+    // Stream mic tracks if two-way mic is enabled
+    if (isMicActive && micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach(track => {
+        pc?.addTrack(track, micStreamRef.current!);
+      });
+    }
 
     pc.oniceconnectionstatechange = () => {
       if (pc) {
@@ -110,10 +131,103 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
         videoRef.current.src = '';
       }
     };
-  }, [cameraId, status]);
+  }, [cameraId, status, isMicActive, retryNonce]);
+
+  // Cleanup mic stream on unmount
+  useEffect(() => {
+    return () => {
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
+
+  // 1. Fullscreen
+  const handleFullscreen = () => {
+    if (containerRef.current) {
+      if (containerRef.current.requestFullscreen) {
+        containerRef.current.requestFullscreen();
+      } else if ((containerRef.current as any).webkitRequestFullscreen) {
+        (containerRef.current as any).webkitRequestFullscreen();
+      }
+    }
+  };
+
+  // 2. Snapshot capture
+  const handleSnapshot = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 1920;
+    canvas.height = video.videoHeight || 1080;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const url = canvas.toDataURL('image/jpeg');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `snapshot_${name.replace(/\s+/g, '_')}_${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`;
+      a.click();
+    }
+  };
+
+  // 3. Two-Way Audio Talk Toggle
+  const toggleMic = async () => {
+    if (isMicActive) {
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach(track => track.stop());
+        micStreamRef.current = null;
+      }
+      setIsMicActive(false);
+      setRetryNonce(n => n + 1);
+    } else {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micStreamRef.current = stream;
+        setIsMicActive(true);
+        setRetryNonce(n => n + 1);
+      } catch (err) {
+        console.error("Failed to access mic:", err);
+        alert("Microphone access denied or not supported.");
+      }
+    }
+  };
+
+  // 4. Zoom / Pan Event Handlers
+  const handleZoomWheel = (e: React.WheelEvent) => {
+    if (!isZoomMode) return;
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.25 : -0.25;
+    setZoomScale(s => Math.min(Math.max(1, s + delta), 8));
+  };
+
+  const handleZoomMouseDown = (e: React.MouseEvent) => {
+    if (!isZoomMode || zoomScale === 1) return;
+    setIsPanning(true);
+    panStart.current = { x: e.clientX - zoomOffset.x, y: e.clientY - zoomOffset.y };
+  };
+
+  const handleZoomMouseMove = (e: React.MouseEvent) => {
+    if (!isPanning) return;
+    const x = e.clientX - panStart.current.x;
+    const y = e.clientY - panStart.current.y;
+    setZoomOffset({ x, y });
+  };
+
+  const handleZoomMouseUp = () => {
+    setIsPanning(false);
+  };
+
+  const toggleZoomMode = () => {
+    setIsZoomMode(!isZoomMode);
+    setZoomScale(1);
+    setZoomOffset({ x: 0, y: 0 });
+    setIsPanning(false);
+  };
 
   return (
     <div 
+      ref={containerRef}
       className="glass-panel"
       style={{
         position: 'relative',
@@ -128,7 +242,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
         boxShadow: hasMotion ? '0 0 20px rgba(244, 63, 94, 0.4)' : 'none'
       }}
       onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseLeave={() => {
+        setIsHovered(false);
+        handleZoomMouseUp();
+      }}
+      onWheel={handleZoomWheel}
+      onMouseDown={handleZoomMouseDown}
+      onMouseMove={handleZoomMouseMove}
+      onMouseUp={handleZoomMouseUp}
     >
       {/* Video Element */}
       {status !== 'offline' ? (
@@ -136,8 +257,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
           ref={videoRef}
           autoPlay 
           playsInline 
-          muted 
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+          muted={isMuted} 
+          style={{ 
+            width: '100%', 
+            height: '100%', 
+            objectFit: 'cover',
+            transform: isZoomMode ? `scale(${zoomScale}) translate(${zoomOffset.x}px, ${zoomOffset.y}px)` : 'none',
+            transformOrigin: 'center center',
+            transition: isPanning ? 'none' : 'transform 0.1s ease',
+            cursor: isZoomMode ? (isPanning ? 'grabbing' : 'grab') : 'default'
+          }} 
         />
       ) : (
         <div style={{
@@ -220,6 +349,27 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
         </div>
       </div>
 
+      {/* Zoom Mode Instruction Overlay */}
+      {isZoomMode && (
+        <div style={{
+          position: 'absolute',
+          top: '50px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(0,0,0,0.8)',
+          border: '1px solid var(--surface-border)',
+          color: '#fff',
+          padding: '4px 10px',
+          borderRadius: '20px',
+          fontSize: '0.7rem',
+          zIndex: 10,
+          pointerEvents: 'none',
+          boxShadow: '0 4px 10px rgba(0,0,0,0.5)'
+        }}>
+          Zoom Active: Use mouse wheel to Zoom & Drag to Pan
+        </div>
+      )}
+
       {/* Bottom Controls Overlay (Visible on Hover) */}
       <div style={{
         position: 'absolute',
@@ -235,24 +385,56 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
         opacity: isHovered ? 1 : 0,
         transition: 'opacity 0.2s ease'
       }}>
-        <button style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: '4px' }} title="Focus Mode">
+        {/* Audio Output Mute/Unmute */}
+        <button 
+          onClick={() => setIsMuted(!isMuted)} 
+          style={{ background: 'transparent', border: 'none', color: isMuted ? '#aaa' : 'var(--color-primary)', cursor: 'pointer', padding: '4px' }} 
+          title={isMuted ? "Unmute Audio" : "Mute Audio"}
+        >
+          {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+        </button>
+
+        {/* Focus Mode (Digital Zoom) */}
+        <button 
+          onClick={toggleZoomMode} 
+          style={{ background: 'transparent', border: 'none', color: isZoomMode ? 'var(--color-primary)' : '#fff', cursor: 'pointer', padding: '4px' }} 
+          title="Digital Zoom & Pan"
+        >
           <Focus size={18} />
         </button>
-        <button style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: '4px' }} title="Two-Way Audio">
-          <Mic size={18} />
+
+        {/* Two-Way Microphone Talk */}
+        <button 
+          onClick={toggleMic} 
+          style={{ background: 'transparent', border: 'none', color: isMicActive ? 'var(--color-danger)' : '#fff', cursor: 'pointer', padding: '4px' }} 
+          title={isMicActive ? "Mute Microphone" : "Two-Way Audio Talk"}
+        >
+          <Mic size={18} style={{ animation: isMicActive ? 'pulse-ring 2s infinite' : 'none' }} />
         </button>
-        <button style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: '4px' }} title="Snapshot">
+
+        {/* Snapshot Capture */}
+        <button 
+          onClick={handleSnapshot} 
+          style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: '4px' }} 
+          title="Take Snapshot"
+        >
           <Camera size={18} />
         </button>
-        <button style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: '4px' }} title="Fullscreen">
+
+        {/* Native Fullscreen */}
+        <button 
+          onClick={handleFullscreen} 
+          style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: '4px' }} 
+          title="Fullscreen Mode"
+        >
           <Maximize size={18} />
         </button>
       </div>
       
-      {/* WebRTC performance overlay stub */}
+      {/* WebRTC performance overlay */}
       {isHovered && isStreaming && (
         <div style={{ position: 'absolute', top: '40px', left: '12px', zIndex: 10, color: 'rgba(255,255,255,0.5)', fontSize: '0.7rem', fontFamily: 'var(--font-mono)' }}>
-          WebRTC | Connected
+          {isMicActive ? 'WebRTC | Bidirectional Audio' : 'WebRTC | Live Stream'}
         </div>
       )}
     </div>
