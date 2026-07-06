@@ -17,14 +17,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
   useEffect(() => {
     if (status === 'offline') return;
 
-    let pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-    });
-
-    pc.addTransceiver('video', { direction: 'recvonly' });
-    pc.addTransceiver('audio', { direction: 'recvonly' });
+    let pc: RTCPeerConnection | null = null;
+    let rtcTimeout: number | undefined;
 
     const fallbackToHls = () => {
+      sessionStorage.setItem('webrtc_failed', 'true');
       if (videoRef.current) {
         videoRef.current.srcObject = null;
         videoRef.current.src = go2rtcUrl(`/api/manifest.m3u8?src=${cameraId}`);
@@ -34,14 +31,33 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
       }
     };
 
+    const webrtcFailed = sessionStorage.getItem('webrtc_failed') === 'true';
+    if (webrtcFailed) {
+      fallbackToHls();
+      return;
+    }
+
+    pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    });
+
+    pc.addTransceiver('video', { direction: 'recvonly' });
+    pc.addTransceiver('audio', { direction: 'recvonly' });
+
     pc.oniceconnectionstatechange = () => {
-      if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
-        console.warn("WebRTC connection failed/disconnected. Falling back to HLS...");
-        fallbackToHls();
+      if (pc) {
+        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+          window.clearTimeout(rtcTimeout);
+        }
+        if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+          console.warn("WebRTC connection failed/disconnected. Falling back to HLS...");
+          fallbackToHls();
+        }
       }
     };
 
     pc.ontrack = (event) => {
+      window.clearTimeout(rtcTimeout);
       if (videoRef.current && videoRef.current.srcObject !== event.streams[0]) {
         videoRef.current.srcObject = event.streams[0];
         setIsStreaming(true);
@@ -50,10 +66,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
 
     const startStream = async () => {
       try {
+        if (!pc) return;
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
-        // Fetch answer from go2rtc API.
         const response = await fetch(go2rtcUrl(`/api/webrtc?src=${cameraId}`), {
           method: 'POST',
           body: offer.sdp
@@ -61,7 +77,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
 
         if (response.ok) {
           const answerSdp = await response.text();
-          await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+          if (pc) {
+            await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+          }
         } else {
           console.warn("WebRTC offer rejected, falling back to HLS");
           fallbackToHls();
@@ -72,11 +90,22 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
       }
     };
 
+    // Set a 2.5s connection timeout for WebRTC before failing over to HLS
+    rtcTimeout = window.setTimeout(() => {
+      if (pc && pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed') {
+        console.warn(`WebRTC connection timed out after 2.5s for camera ${cameraId}. Falling back to HLS...`);
+        fallbackToHls();
+      }
+    }, 2500);
+
     startStream();
 
     return () => {
       setIsStreaming(false);
-      pc.close();
+      window.clearTimeout(rtcTimeout);
+      if (pc) {
+        pc.close();
+      }
       if (videoRef.current) {
         videoRef.current.src = '';
       }
