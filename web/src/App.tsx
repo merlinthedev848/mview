@@ -1,10 +1,11 @@
 import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
-import { Video, PlaySquare, Bell, Settings as SettingsIcon, ShieldCheck, HardDrive, LogOut, Wifi } from 'lucide-react';
+import { Video, PlaySquare, Bell, Settings as SettingsIcon, ShieldCheck, HardDrive, LogOut, Wifi, LayoutDashboard } from 'lucide-react';
 
 import Login     from './pages/Login';
 import { apiUrl } from './lib/endpoints';
 
+const Dashboard = lazy(() => import('./pages/Dashboard'));
 const LiveView = lazy(() => import('./pages/LiveView'));
 const Playback = lazy(() => import('./pages/Playback'));
 const Events = lazy(() => import('./pages/Events'));
@@ -114,10 +115,11 @@ const Sidebar = ({ onLogout }: { onLogout: () => void }) => {
   const unreadEvents = events.length;
 
   const navItems = [
-    { to: '/',         label: 'Live View',  icon: <Video       size={16} />, end: true  },
-    { to: '/playback', label: 'Playback',   icon: <PlaySquare  size={16} />, end: false },
-    { to: '/events',   label: 'Events',     icon: <Bell        size={16} />, end: false, badge: unreadEvents || undefined },
-    { to: '/settings', label: 'Settings',   icon: <SettingsIcon size={16} />, end: false },
+    { to: '/',         label: 'Dashboard',  icon: <LayoutDashboard size={16} />, end: true  },
+    { to: '/live',     label: 'Live View',  icon: <Video           size={16} />, end: false },
+    { to: '/playback', label: 'Playback',   icon: <PlaySquare      size={16} />, end: false },
+    { to: '/events',   label: 'Events',     icon: <Bell            size={16} />, end: false, badge: unreadEvents || undefined },
+    { to: '/settings', label: 'Settings',   icon: <SettingsIcon    size={16} />, end: false },
   ];
 
   return (
@@ -247,7 +249,8 @@ function App() {
         <div className="main-content">
           <Suspense fallback={<div className="empty">Loading...</div>}>
             <Routes>
-              <Route path="/"         element={<LiveView />}  />
+              <Route path="/"         element={<Dashboard />} />
+              <Route path="/live"     element={<LiveView />}  />
               <Route path="/playback" element={<Playback />}  />
               <Route path="/events"   element={<Events />}    />
               <Route path="/settings" element={<Settings />}  />

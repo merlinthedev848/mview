@@ -89,36 +89,46 @@ const CameraFeedComponent: React.FC<{
   useEffect(() => {
     if (cam.status === 'offline' || !cam.rtsp_url_main) return;
 
-    const pc = new RTCPeerConnection({ iceServers });
-    let retryTimer: number | undefined;
-    let disconnectTimer: number | undefined;
-    let watchdog: number | undefined;
+    let pc: RTCPeerConnection | null = null;
+    let rtcTimeout: number | undefined;
     setConnected(false);
 
-    const scheduleRetry = () => {
-      if (retryTimer) return;
-      retryTimer = window.setTimeout(() => setRetryNonce(n => n + 1), 5000);
+    const fallbackToHls = () => {
+      sessionStorage.setItem('webrtc_failed', 'true');
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+        videoRef.current.src = go2rtcUrl(`/api/manifest.m3u8?src=${encodeURIComponent(streamName)}`);
+        videoRef.current.load();
+        videoRef.current.play().catch(e => console.log("HLS play error:", e));
+        setConnected(true);
+      }
     };
+
+    const webrtcFailed = sessionStorage.getItem('webrtc_failed') === 'true';
+    if (webrtcFailed) {
+      fallbackToHls();
+      return;
+    }
+
+    pc = new RTCPeerConnection({ iceServers });
 
     pc.addTransceiver('video', { direction: 'recvonly' });
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'connected') {
-        if (disconnectTimer) window.clearTimeout(disconnectTimer);
-        setConnected(true);
-      }
-      if (pc.connectionState === 'failed') {
-        scheduleRetry();
-      }
-      if (pc.connectionState === 'disconnected') {
-        if (disconnectTimer) return;
-        disconnectTimer = window.setTimeout(() => {
-          if (pc.connectionState === 'disconnected') scheduleRetry();
-        }, 8000);
+      if (pc) {
+        if (pc.connectionState === 'connected') {
+          window.clearTimeout(rtcTimeout);
+          setConnected(true);
+        }
+        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+          console.warn('[LiveView WebRTC] connection failed/disconnected. Falling back to HLS...');
+          fallbackToHls();
+        }
       }
     };
 
     pc.ontrack = e => {
+      window.clearTimeout(rtcTimeout);
       if (videoRef.current && videoRef.current.srcObject !== e.streams[0]) {
         videoRef.current.srcObject = e.streams[0];
         setConnected(true);
@@ -127,6 +137,7 @@ const CameraFeedComponent: React.FC<{
 
     (async () => {
       try {
+        if (!pc) return;
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         const res = await fetch(go2rtcUrl(`/api/webrtc?src=${encodeURIComponent(streamName)}`), {
@@ -134,24 +145,29 @@ const CameraFeedComponent: React.FC<{
           body: offer.sdp,
         });
         if (!res.ok) throw new Error(`go2rtc WebRTC returned ${res.status}`);
-        await pc.setRemoteDescription({ type: 'answer', sdp: await res.text() });
-        watchdog = window.setTimeout(() => {
-          if (!videoRef.current?.srcObject) scheduleRetry();
-        }, 8000);
+        if (pc) {
+          await pc.setRemoteDescription({ type: 'answer', sdp: await res.text() });
+        }
       } catch (e) {
-        console.error('[WebRTC]', cam.name, e);
-        scheduleRetry();
+        console.error('[LiveView WebRTC]', cam.name, e);
+        fallbackToHls();
       }
     })();
 
+    // Set a 2.5s connection timeout for WebRTC before failing over to HLS
+    rtcTimeout = window.setTimeout(() => {
+      if (pc && pc.connectionState !== 'connected') {
+        console.warn(`[LiveView WebRTC] connection timed out after 2.5s for ${cam.name}. Falling back to HLS...`);
+        fallbackToHls();
+      }
+    }, 2500);
+
     return () => {
-      if (retryTimer) window.clearTimeout(retryTimer);
-      if (disconnectTimer) window.clearTimeout(disconnectTimer);
-      if (watchdog) window.clearTimeout(watchdog);
-      pc.close();
+      window.clearTimeout(rtcTimeout);
+      if (pc) pc.close();
       setConnected(false);
     };
-  }, [cam.id, cam.name, cam.status, cam.rtsp_url_main, streamName, retryNonce, iceServersKey]);
+  }, [cam.id, cam.name, cam.status, cam.rtsp_url_main, streamName, iceServersKey]);
 
   useEffect(() => {
     const video = videoRef.current;
