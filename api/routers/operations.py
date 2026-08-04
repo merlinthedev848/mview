@@ -1,20 +1,32 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import hashlib
+import json
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import delete, select
+from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
 from api.database import get_db
 from api.models.ai import SemanticEvent
 from api.models.camera import Camera
-from api.models.operations import AlertRule, EventReview, NVRConnection, PrivacyMode
+from api.models.operations import (
+    AlertRule,
+    EventReview,
+    EvidencePackage,
+    IncidentCase,
+    IntegrationEndpoint,
+    NVRConnection,
+    PrivacyMode,
+    SiteNode,
+    StoragePolicy,
+)
 from api.services.local_core import local_core
 from api.services.recorder import recorder_manager
 
@@ -86,6 +98,54 @@ class ReviewPayload(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
+class EvidencePackagePayload(BaseModel):
+    event_ids: list[str] = Field(default_factory=list)
+    title: str = Field(default="Evidence package", max_length=160)
+    include_clips: bool = True
+    include_metadata: bool = True
+    watermark: bool = True
+
+
+class CasePayload(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    status: Literal["open", "reviewing", "resolved", "archived"] = "open"
+    severity: Literal["low", "medium", "high", "critical"] = "medium"
+    assigned_to: str = ""
+    event_ids: list[str] = Field(default_factory=list)
+    incident_id: str | None = None
+    notes: str = ""
+    locked: bool = False
+
+
+class StoragePolicyPayload(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    enabled: bool = True
+    camera_ids: list[str] = Field(default_factory=list)
+    retention_days: int = Field(default=30, ge=1, le=3650)
+    event_retention_days: int = Field(default=90, ge=1, le=3650)
+    archive_target: Literal["local", "nas", "s3", "none"] = "local"
+    lock_evidence: bool = True
+    record_mode: Literal["continuous", "motion", "events_only"] = "continuous"
+
+
+class IntegrationPayload(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    kind: Literal["webhook", "mqtt", "email", "home_assistant", "slack", "teams"] = "webhook"
+    enabled: bool = True
+    target: str = ""
+    events: list[str] = Field(default_factory=lambda: ["critical_incident", "camera_offline"])
+    secret_ref: str = ""
+
+
+class SiteNodePayload(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    role: Literal["recorder", "viewer", "relay", "backup"] = "recorder"
+    endpoint: str = ""
+    enabled: bool = True
+    location: str = ""
+    notes: str = ""
+
+
 def _credentials(username: str, password: str) -> str:
     if not username:
         return ""
@@ -132,6 +192,67 @@ def _nvr_response(nvr: NVRConnection) -> dict[str, Any]:
     }
 
 
+def _case_response(row: IncidentCase) -> dict[str, Any]:
+    return {
+        **(row.config or {}),
+        "id": row.id,
+        "title": row.title,
+        "status": row.status,
+        "severity": row.severity,
+        "assigned_to": row.assigned_to or "",
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+def _policy_response(row: StoragePolicy) -> dict[str, Any]:
+    return {
+        **(row.config or {}),
+        "id": row.id,
+        "name": row.name,
+        "enabled": row.enabled,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+def _integration_response(row: IntegrationEndpoint) -> dict[str, Any]:
+    return {
+        **(row.config or {}),
+        "id": row.id,
+        "name": row.name,
+        "kind": row.kind,
+        "enabled": row.enabled,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+def _site_response(row: SiteNode) -> dict[str, Any]:
+    return {
+        **(row.config or {}),
+        "id": row.id,
+        "name": row.name,
+        "role": row.role,
+        "endpoint": row.endpoint,
+        "status": row.status,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+def _evidence_response(row: EvidencePackage) -> dict[str, Any]:
+    return {
+        **(row.config or {}),
+        "id": row.id,
+        "title": row.title,
+        "sha256": row.package_hash,
+        "status": row.status,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
 async def _refresh_recorders(db: AsyncSession) -> None:
     result = await db.execute(select(Camera))
     await recorder_manager.sync_cameras(result.scalars().all())
@@ -160,6 +281,67 @@ def _recording_dir_size() -> dict[str, Any]:
     }
 
 
+def _readiness_score(issues: list[dict[str, Any]], cameras: list[Camera], recorder_status: dict[str, Any], storage: dict[str, Any]) -> dict[str, Any]:
+    score = 100
+    for issue in issues:
+        if issue["severity"] == "critical":
+            score -= 25
+        elif issue["severity"] == "high":
+            score -= 14
+        else:
+            score -= 7
+    if cameras and len(recorder_status) < len([cam for cam in cameras if cam.enabled]):
+        score -= 10
+    if storage["files"] == 0 and cameras:
+        score -= 8
+    score = max(0, min(100, score))
+    if score >= 90:
+        level = "excellent"
+    elif score >= 75:
+        level = "good"
+    elif score >= 55:
+        level = "degraded"
+    else:
+        level = "attention"
+    return {"score": score, "level": level}
+
+
+def _event_payload(event: SemanticEvent, camera_names: dict[str, str]) -> dict[str, Any]:
+    return {
+        "id": event.id,
+        "camera_id": event.camera_id,
+        "camera_name": camera_names.get(event.camera_id, event.camera_id),
+        "object_class": event.object_class,
+        "confidence": event.confidence,
+        "thumbnail_path": event.thumbnail_path,
+        "clip_path": event.clip_path,
+        "timestamp": event.timestamp.isoformat() if event.timestamp else None,
+    }
+
+
+def _naive_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _incident_severity(events: list[Any]) -> str:
+    def value(event: Any, key: str) -> Any:
+        if isinstance(event, dict):
+            return event.get(key)
+        return getattr(event, key, None)
+
+    objects = {value(event, "object_class") for event in events}
+    confidence = max((value(event, "confidence") or 0 for event in events), default=0)
+    if {"person", "face", "license_plate"}.intersection(objects) and confidence >= 0.85:
+        return "critical"
+    if {"person", "car", "truck", "vehicle"}.intersection(objects):
+        return "high"
+    if confidence >= 0.7:
+        return "medium"
+    return "low"
+
+
 @router.get("/health-center")
 async def health_center(db: AsyncSession = Depends(get_db)):
     cameras = (await db.execute(select(Camera))).scalars().all()
@@ -177,9 +359,11 @@ async def health_center(db: AsyncSession = Depends(get_db)):
         issues.append({"scope": "recording", "id": cam.id, "name": cam.name, "severity": "critical", "message": "Recorder is not active for this enabled camera"})
     if not cameras:
         issues.append({"scope": "setup", "severity": "medium", "message": "No cameras have been added yet"})
+    readiness = _readiness_score(issues, cameras, recorder_status, storage)
 
     return {
         "generated_at": datetime.utcnow().isoformat(),
+        "readiness": readiness,
         "summary": {
             "cameras": len(cameras),
             "recording": len(recorder_status),
@@ -203,6 +387,270 @@ async def health_center(db: AsyncSession = Depends(get_db)):
             for event in events
         ],
     }
+
+
+@router.get("/incidents")
+async def list_incidents(
+    limit: int = 200,
+    window_minutes: int = 10,
+    db: AsyncSession = Depends(get_db),
+):
+    cameras = (await db.execute(select(Camera))).scalars().all()
+    camera_names = {camera.id: camera.name for camera in cameras}
+    rows = (await db.execute(
+        select(SemanticEvent).order_by(desc(SemanticEvent.timestamp)).limit(min(limit, 500))
+    )).scalars().all()
+
+    incidents: list[dict[str, Any]] = []
+    for event in rows:
+        event_time = _naive_utc(event.timestamp or datetime.utcnow())
+        match = None
+        for incident in incidents:
+            if incident["camera_id"] != event.camera_id:
+                continue
+            start = _naive_utc(datetime.fromisoformat(incident["start"].replace("Z", "+00:00")))
+            end = _naive_utc(datetime.fromisoformat(incident["end"].replace("Z", "+00:00")))
+            if start - timedelta(minutes=window_minutes) <= event_time <= end + timedelta(minutes=window_minutes):
+                match = incident
+                break
+        if match is None:
+            match = {
+                "id": f"{event.camera_id}-{event_time.strftime('%Y%m%d%H%M')}",
+                "camera_id": event.camera_id,
+                "camera_name": camera_names.get(event.camera_id, event.camera_id),
+                "start": event_time.isoformat(),
+                "end": event_time.isoformat(),
+                "events": [],
+                "objects": [],
+                "severity": "low",
+                "summary": "",
+            }
+            incidents.append(match)
+
+        match["events"].append(_event_payload(event, camera_names))
+        times = [_naive_utc(datetime.fromisoformat(item["timestamp"].replace("Z", "+00:00"))) for item in match["events"] if item.get("timestamp")]
+        if times:
+            match["start"] = min(times).isoformat()
+            match["end"] = max(times).isoformat()
+        objects = sorted({item["object_class"] or "event" for item in match["events"]})
+        match["objects"] = objects
+        match["severity"] = _incident_severity(match["events"])
+        match["summary"] = f"{len(match['events'])} event{'s' if len(match['events']) != 1 else ''}: {', '.join(objects)}"
+
+    return incidents[:50]
+
+
+@router.post("/evidence-package")
+async def create_evidence_package(payload: EvidencePackagePayload, db: AsyncSession = Depends(get_db)):
+    if not payload.event_ids:
+        raise HTTPException(400, "Select at least one event")
+    events = (await db.execute(
+        select(SemanticEvent).where(SemanticEvent.id.in_(payload.event_ids)).order_by(SemanticEvent.timestamp.asc())
+    )).scalars().all()
+    if not events:
+        raise HTTPException(404, "No matching events found")
+    cameras = (await db.execute(select(Camera))).scalars().all()
+    camera_names = {camera.id: camera.name for camera in cameras}
+    manifest = {
+        "title": payload.title,
+        "generated_at": datetime.utcnow().isoformat(),
+        "watermark": payload.watermark,
+        "include_clips": payload.include_clips,
+        "include_metadata": payload.include_metadata,
+        "events": [_event_payload(event, camera_names) for event in events],
+    }
+    digest = hashlib.sha256(json.dumps(manifest, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+    row = EvidencePackage(
+        title=payload.title,
+        package_hash=digest,
+        status="manifest_ready",
+        config={
+            "package_id": digest[:16],
+            "event_count": len(events),
+            "camera_count": len({event.camera_id for event in events}),
+            "manifest": manifest,
+        },
+    )
+    db.add(row)
+    await db.commit()
+    return {
+        "id": row.id,
+        "package_id": digest[:16],
+        "sha256": digest,
+        "status": row.status,
+        "event_count": len(events),
+        "camera_count": len({event.camera_id for event in events}),
+        "manifest": manifest,
+    }
+
+
+@router.get("/evidence-packages")
+async def list_evidence_packages(db: AsyncSession = Depends(get_db)):
+    rows = (await db.execute(select(EvidencePackage).order_by(EvidencePackage.created_at.desc()))).scalars().all()
+    return [_evidence_response(row) for row in rows]
+
+
+@router.get("/cases")
+async def list_cases(db: AsyncSession = Depends(get_db)):
+    rows = (await db.execute(select(IncidentCase).order_by(IncidentCase.updated_at.desc()))).scalars().all()
+    return [_case_response(row) for row in rows]
+
+
+@router.post("/cases", status_code=201)
+async def create_case(payload: CasePayload, db: AsyncSession = Depends(get_db)):
+    row = IncidentCase(
+        title=payload.title,
+        status=payload.status,
+        severity=payload.severity,
+        assigned_to=payload.assigned_to,
+        config=payload.model_dump(),
+    )
+    db.add(row)
+    await db.commit()
+    return _case_response(row)
+
+
+@router.patch("/cases/{case_id}")
+async def update_case(case_id: str, payload: CasePayload, db: AsyncSession = Depends(get_db)):
+    row = await db.get(IncidentCase, case_id)
+    if not row:
+        raise HTTPException(404, "Case not found")
+    row.title = payload.title
+    row.status = payload.status
+    row.severity = payload.severity
+    row.assigned_to = payload.assigned_to
+    row.config = payload.model_dump()
+    await db.commit()
+    return _case_response(row)
+
+
+@router.delete("/cases/{case_id}")
+async def delete_case(case_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(delete(IncidentCase).where(IncidentCase.id == case_id))
+    await db.commit()
+    return {"status": "deleted"}
+
+
+@router.post("/cases/from-incident", status_code=201)
+async def create_case_from_incident(incident_id: str, db: AsyncSession = Depends(get_db)):
+    incidents = await list_incidents(db=db)
+    incident = next((item for item in incidents if item["id"] == incident_id), None)
+    if not incident:
+        raise HTTPException(404, "Incident not found")
+    payload = CasePayload(
+        title=f"{incident['camera_name']} - {incident['summary']}",
+        severity=incident["severity"],
+        event_ids=[event["id"] for event in incident["events"]],
+        incident_id=incident["id"],
+        notes="Created from grouped incident.",
+        locked=incident["severity"] in {"high", "critical"},
+    )
+    return await create_case(payload, db)
+
+
+@router.get("/storage-policies")
+async def list_storage_policies(db: AsyncSession = Depends(get_db)):
+    rows = (await db.execute(select(StoragePolicy).order_by(StoragePolicy.created_at.desc()))).scalars().all()
+    return [_policy_response(row) for row in rows]
+
+
+@router.post("/storage-policies", status_code=201)
+async def create_storage_policy(payload: StoragePolicyPayload, db: AsyncSession = Depends(get_db)):
+    row = StoragePolicy(name=payload.name, enabled=payload.enabled, config=payload.model_dump())
+    db.add(row)
+    await db.commit()
+    return _policy_response(row)
+
+
+@router.delete("/storage-policies/{policy_id}")
+async def delete_storage_policy(policy_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(delete(StoragePolicy).where(StoragePolicy.id == policy_id))
+    await db.commit()
+    return {"status": "deleted"}
+
+
+@router.get("/storage-forecast")
+async def storage_forecast(db: AsyncSession = Depends(get_db)):
+    policies = (await db.execute(select(StoragePolicy))).scalars().all()
+    storage = _recording_dir_size()
+    active_policy_count = len([policy for policy in policies if policy.enabled])
+    protected_days = max([(policy.config or {}).get("event_retention_days", 0) for policy in policies if policy.enabled] or [0])
+    return {
+        "recording_gb": storage["gb"],
+        "recording_files": storage["files"],
+        "active_policies": active_policy_count,
+        "max_event_retention_days": protected_days,
+        "latest_recording": storage["latest_recording"],
+        "recommendation": "Add a storage policy per camera group and lock evidence packages before purge jobs run.",
+    }
+
+
+@router.get("/integrations")
+async def list_integrations(db: AsyncSession = Depends(get_db)):
+    rows = (await db.execute(select(IntegrationEndpoint).order_by(IntegrationEndpoint.created_at.desc()))).scalars().all()
+    return [_integration_response(row) for row in rows]
+
+
+@router.post("/integrations", status_code=201)
+async def create_integration(payload: IntegrationPayload, db: AsyncSession = Depends(get_db)):
+    row = IntegrationEndpoint(
+        name=payload.name,
+        kind=payload.kind,
+        enabled=payload.enabled,
+        config=payload.model_dump(),
+    )
+    db.add(row)
+    await db.commit()
+    return _integration_response(row)
+
+
+@router.post("/integrations/{integration_id}/test")
+async def test_integration(integration_id: str, db: AsyncSession = Depends(get_db)):
+    row = await db.get(IntegrationEndpoint, integration_id)
+    if not row:
+        raise HTTPException(404, "Integration not found")
+    if not row.enabled:
+        return {"status": "skipped", "message": "Integration is disabled"}
+    target = (row.config or {}).get("target", "")
+    return {
+        "status": "configured",
+        "message": f"{row.kind} integration is ready for event dispatch.",
+        "target_present": bool(target),
+    }
+
+
+@router.delete("/integrations/{integration_id}")
+async def delete_integration(integration_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(delete(IntegrationEndpoint).where(IntegrationEndpoint.id == integration_id))
+    await db.commit()
+    return {"status": "deleted"}
+
+
+@router.get("/sites")
+async def list_sites(db: AsyncSession = Depends(get_db)):
+    rows = (await db.execute(select(SiteNode).order_by(SiteNode.created_at.desc()))).scalars().all()
+    return [_site_response(row) for row in rows]
+
+
+@router.post("/sites", status_code=201)
+async def create_site(payload: SiteNodePayload, db: AsyncSession = Depends(get_db)):
+    row = SiteNode(
+        name=payload.name,
+        role=payload.role,
+        endpoint=payload.endpoint,
+        status="enabled" if payload.enabled else "disabled",
+        config=payload.model_dump(),
+    )
+    db.add(row)
+    await db.commit()
+    return _site_response(row)
+
+
+@router.delete("/sites/{site_id}")
+async def delete_site(site_id: str, db: AsyncSession = Depends(get_db)):
+    await db.execute(delete(SiteNode).where(SiteNode.id == site_id))
+    await db.commit()
+    return {"status": "deleted"}
 
 
 @router.post("/nvrs/preview")

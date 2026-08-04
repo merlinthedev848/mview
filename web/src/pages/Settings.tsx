@@ -1562,23 +1562,23 @@ const Settings: React.FC = () => {
                 </div>
 
                 {updateInfo && (
-                  <div style={{ marginTop: 20, padding: 16, border: '1px solid var(--border)', borderRadius: 8, background: 'rgba(255,255,255,0.02)' }}>
+                  <div style={{ marginTop: 20, padding: 16, border: '1px solid var(--border)', borderRadius: 8, background: 'rgba(255,255,255,0.02)', overflow: 'visible' }}>
                     <div style={{ fontWeight: 600, color: 'var(--text-1)', marginBottom: 8, fontSize: '0.85rem' }}>Update Information</div>
                     <div style={{ fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '140px minmax(0, 1fr)', gap: 12, alignItems: 'start' }}>
                         <span style={{ color: 'var(--text-2)' }}>Manifest:</span>
-                        <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{updateInfo.manifest_url || systemConfig.updates.manifest_url}</span>
+                        <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)', overflowWrap: 'anywhere', wordBreak: 'break-word', lineHeight: 1.45 }}>{updateInfo.manifest_url || systemConfig.updates.manifest_url}</span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '140px minmax(0, 1fr)', gap: 12 }}>
                         <span style={{ color: 'var(--text-2)' }}>Current Commit:</span>
-                        <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)' }}>{updateInfo.current_sha}</span>
+                        <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)', overflowWrap: 'anywhere' }}>{updateInfo.current_sha}</span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '140px minmax(0, 1fr)', gap: 12 }}>
                         <span style={{ color: 'var(--text-2)' }}>Latest Commit:</span>
-                        <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)' }}>{updateInfo.latest_sha}</span>
+                        <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)', overflowWrap: 'anywhere' }}>{updateInfo.latest_sha}</span>
                       </div>
                       {updateInfo.version && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '140px minmax(0, 1fr)', gap: 12 }}>
                           <span style={{ color: 'var(--text-2)' }}>Version:</span>
                           <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)' }}>{updateInfo.version}</span>
                         </div>
