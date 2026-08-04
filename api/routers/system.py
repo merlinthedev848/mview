@@ -16,6 +16,7 @@ from api.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.ai import Face, SemanticEvent
 from api.models.camera import Camera
+from api.models.operations import AlertRule, EventReview, NVRConnection, PrivacyMode
 from api.models.user import User
 from api.routers.auth import get_current_user
 from api.services.recorder import purge_all_recordings
@@ -202,6 +203,10 @@ async def backup_database(
         "users": await rows(User),
         "faces": await rows(Face),
         "semantic_events": await rows(SemanticEvent),
+        "nvr_connections": await rows(NVRConnection),
+        "alert_rules": await rows(AlertRule),
+        "privacy_modes": await rows(PrivacyMode),
+        "event_reviews": await rows(EventReview),
     }
     backup_path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
     return FileResponse(
@@ -283,8 +288,12 @@ async def factory_reset(
     try:
         bind = db.get_bind()
         if bind and bind.dialect.name == "postgresql":
-            await db.execute(text("TRUNCATE TABLE semantic_events, faces, cameras CASCADE;"))
+            await db.execute(text("TRUNCATE TABLE event_reviews, privacy_modes, alert_rules, nvr_connections, semantic_events, faces, cameras CASCADE;"))
         else:
+            await db.execute(delete(EventReview))
+            await db.execute(delete(PrivacyMode))
+            await db.execute(delete(AlertRule))
+            await db.execute(delete(NVRConnection))
             await db.execute(delete(SemanticEvent))
             await db.execute(delete(Face))
             await db.execute(delete(Camera))

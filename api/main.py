@@ -10,7 +10,8 @@ from pathlib import Path
 
 from api.database import engine, Base
 from api.models.user import User
-from api.routers import cameras, recordings, events, system, auth, users, maps
+from api.models import operations as operations_models  # noqa: F401 - registers SQLAlchemy tables
+from api.routers import cameras, recordings, events, system, auth, users, maps, operations
 from api.services.recorder import recorder_manager
 from api.services.local_core import local_snapshot_worker
 from api.config import settings
@@ -62,7 +63,7 @@ async def lifespan(app: FastAPI):
                 username=settings.default_admin_username,
                 hashed_password=get_password_hash(admin_password),
                 role="admin",
-                permissions=["live", "playback", "events", "settings"],
+                permissions=["live", "playback", "events", "settings", "operations"],
             ))
             await db.commit()
             log.info("Seeded default admin user.")
@@ -132,6 +133,7 @@ async def auth_middleware(request: Request, call_next):
         ("/recordings", {"playback"}),
         ("/events", {"events"}),
         ("/maps", {"live", "settings"}),
+        ("/ops-api", {"operations", "settings"}),
         ("/system/live", {"live", "settings"}),
         ("/system", {"settings"}),
         ("/users", {"settings"}),
@@ -178,6 +180,7 @@ app.include_router(events.router)
 app.include_router(system.router)
 app.include_router(users.router)
 app.include_router(maps.router)
+app.include_router(operations.router)
 
 
 @app.get("/system/health")

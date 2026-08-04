@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from api.database import get_db
 from api.models.ai import SemanticEvent as Event
+from api.models.operations import EventReview
 from typing import List, Optional
 import datetime
 
@@ -25,6 +26,8 @@ async def get_events(
         
     result = await db.execute(query)
     events = result.scalars().all()
+    review_result = await db.execute(select(EventReview).where(EventReview.event_id.in_([e.id for e in events]))) if events else None
+    reviews = {review.event_id: review for review in review_result.scalars().all()} if review_result else {}
     
     return [
         {
@@ -32,7 +35,12 @@ async def get_events(
             "camera_id": e.camera_id,
             "object_class": e.object_class,
             "confidence": e.confidence,
-            "timestamp": e.timestamp.isoformat() if e.timestamp else None
+            "timestamp": e.timestamp.isoformat() if e.timestamp else None,
+            "review": {
+                "verdict": reviews[e.id].verdict,
+                "note": reviews[e.id].note or "",
+                "tags": (reviews[e.id].config or {}).get("tags", []),
+            } if e.id in reviews else None,
         }
         for e in events
     ]

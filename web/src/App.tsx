@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useState, useEffect } from 'react';
-import { Video, PlaySquare, Bell, Settings as SettingsIcon, ShieldCheck, HardDrive, LogOut, Wifi, LayoutDashboard, Map as MapIcon } from 'lucide-react';
+import { Video, PlaySquare, Bell, Settings as SettingsIcon, ShieldCheck, HardDrive, LogOut, Wifi, LayoutDashboard, Map as MapIcon, Activity } from 'lucide-react';
 
 import Login     from './pages/Login';
 import { apiUrl } from './lib/endpoints';
@@ -9,6 +9,7 @@ const LiveView = lazy(() => import('./pages/LiveView'));
 const Playback = lazy(() => import('./pages/Playback'));
 const Events = lazy(() => import('./pages/Events'));
 const MapView = lazy(() => import('./pages/MapView'));
+const Operations = lazy(() => import('./pages/Operations'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Wallboard = lazy(() => import('./pages/Wallboard'));
 
@@ -145,6 +146,7 @@ const Sidebar = ({ onLogout, currentPath }: { onLogout: () => void; currentPath:
     { to: '/playback', label: 'Playback',   icon: <PlaySquare      size={16} />, end: false },
     { to: '/events',   label: 'Events',     icon: <Bell            size={16} />, end: false, badge: unreadEvents || undefined },
     { to: '/map',      label: 'Map',        icon: <MapIcon         size={16} />, end: false },
+    { to: '/operations', label: 'Operations', icon: <Activity      size={16} />, end: false },
     { to: '/settings', label: 'Settings',   icon: <SettingsIcon    size={16} />, end: false },
   ];
 
@@ -283,6 +285,7 @@ function App() {
     '/playback': <Playback />,
     '/events': <Events />,
     '/map': <MapView />,
+    '/operations': <Operations />,
     '/settings': <Settings />,
   };
 

@@ -215,6 +215,7 @@ const getCurrentUser = (): TokenUser => {
 };
 
 type Tab = 'cameras' | 'ai' | 'network' | 'system' | 'users';
+const permissionOptions = ['live', 'playback', 'events', 'operations', 'settings'];
 
 const Settings: React.FC = () => {
   const [tab, setTab] = useState<Tab>('cameras');
@@ -1620,7 +1621,7 @@ const Settings: React.FC = () => {
                           setEditUserForm(f => ({
                             ...f,
                             role,
-                            permissions: role === 'admin' ? ['live', 'playback', 'events', 'settings'] : f.permissions,
+                            permissions: role === 'admin' ? permissionOptions : f.permissions,
                           }));
                         }}
                       >
@@ -1633,7 +1634,7 @@ const Settings: React.FC = () => {
                     <div className="form-group">
                       <label className="form-label" style={{ marginBottom: 8 }}>Permissions</label>
                       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                        {['live', 'playback', 'events', 'settings'].map(permission => (
+                        {permissionOptions.map(permission => (
                           <label key={permission} style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-2)', fontSize: '0.8rem', textTransform: 'capitalize', cursor: 'pointer' }}>
                             <input
                               type="checkbox"
@@ -1738,7 +1739,7 @@ const Settings: React.FC = () => {
                             setNewUser(u => ({
                               ...u,
                               role,
-                              permissions: role === 'admin' ? ['live', 'playback', 'events', 'settings'] : u.permissions,
+                              permissions: role === 'admin' ? permissionOptions : u.permissions,
                             }));
                           }}
                         >
@@ -1748,7 +1749,7 @@ const Settings: React.FC = () => {
                         </select>
                       </div>
                       <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 18, alignItems: 'center', paddingTop: 4 }}>
-                        {['live', 'playback', 'events', 'settings'].map(permission => (
+                        {permissionOptions.map(permission => (
                           <label key={permission} style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-2)', fontSize: '0.8rem', textTransform: 'capitalize' }}>
                             <input
                               type="checkbox"
