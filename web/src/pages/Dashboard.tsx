@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { Camera, Shield, Activity, HardDrive, AlertTriangle, Play, LayoutDashboard } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Activity, AlertTriangle, Camera, HardDrive, Play } from 'lucide-react';
+import { Area, AreaChart, ResponsiveContainer, Tooltip } from 'recharts';
 import VideoPlayer from '../components/VideoPlayer';
-import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
 import { apiUrl } from '../lib/endpoints';
 
 interface DashboardCamera {
@@ -19,6 +19,28 @@ interface DashboardEvent {
   timestamp?: string;
 }
 
+const panelStyle: React.CSSProperties = {
+  background: 'var(--bg-card)',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--r-lg)',
+  overflow: 'hidden',
+};
+
+const sectionHeaderStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
+  padding: '14px 16px',
+  borderBottom: '1px solid var(--border)',
+};
+
+const formatStorage = (gb?: number) => {
+  if (!gb || gb <= 0) return '0 GB';
+  if (gb >= 1024) return `${(gb / 1024).toFixed(2)} TB`;
+  return `${gb.toFixed(1)} GB`;
+};
+
 export const Dashboard = () => {
   const [cameras, setCameras] = useState<DashboardCamera[]>([]);
   const [events, setEvents] = useState<DashboardEvent[]>([]);
@@ -28,212 +50,217 @@ export const Dashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch cameras
-        const camRes = await fetch(apiUrl('/cameras'));
+        const [camRes, eventRes, healthRes] = await Promise.all([
+          fetch(apiUrl('/cameras')),
+          fetch(apiUrl('/events?limit=20')),
+          fetch(apiUrl('/system/health')),
+        ]);
+
         if (camRes.ok) {
           const camData = await camRes.json() as DashboardCamera[];
           setCameras(camData);
-          setStats(s => ({ 
-            ...s, 
-            total_cameras: camData.length, 
-            online_cameras: camData.filter(c => c.status === 'online' || c.status === 'recording').length
+          setStats(s => ({
+            ...s,
+            total_cameras: camData.length,
+            online_cameras: camData.filter(c => c.status === 'online' || c.status === 'recording').length,
           }));
         }
 
-        // Fetch events
-        const eventRes = await fetch(apiUrl('/events?limit=20'));
         if (eventRes.ok) {
           const eventData = await eventRes.json() as DashboardEvent[];
           setEvents(eventData);
           setStats(s => ({ ...s, events_today: eventData.length }));
         }
 
-        // Fetch storage health
-        const healthRes = await fetch(apiUrl('/system/health'));
         if (healthRes.ok) {
           const healthData = await healthRes.json();
-          if (healthData.storage) {
-            setStorage(healthData.storage);
-          }
+          if (healthData.storage) setStorage(healthData.storage);
         }
       } catch (error) {
-        console.error("Failed to fetch real dashboard data:", error);
+        console.error('Failed to fetch dashboard data:', error);
       }
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
+    const interval = window.setInterval(fetchData, 5000);
+    return () => window.clearInterval(interval);
   }, []);
 
-  const chartData = React.useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const ev of events) {
-      const cls = ev.object_class || 'other';
-      counts[cls] = (counts[cls] || 0) + 1;
+  const chartData = useMemo(() => {
+    const buckets: Record<string, number> = {};
+    for (const event of events) {
+      const label = event.object_class || 'other';
+      buckets[label] = (buckets[label] || 0) + 1;
     }
-    return Object.entries(counts).map(([name, count]) => ({ name, count }));
+    return Object.entries(buckets).map(([name, count]) => ({ name, count }));
   }, [events]);
 
+  const kpis = [
+    {
+      label: 'Active Cameras',
+      value: stats.total_cameras,
+      detail: `${stats.online_cameras} online`,
+      icon: Camera,
+      tone: 'var(--cyan)',
+      background: 'rgba(57,255,20,0.09)',
+    },
+    {
+      label: 'AI Events',
+      value: stats.events_today,
+      detail: 'real-time',
+      icon: AlertTriangle,
+      tone: 'var(--red)',
+      background: 'rgba(244,63,94,0.10)',
+    },
+    {
+      label: 'System Health',
+      value: 'OK',
+      detail: 'online',
+      icon: Activity,
+      tone: 'var(--green)',
+      background: 'rgba(34,197,94,0.10)',
+    },
+    {
+      label: 'Storage Used',
+      value: storage ? formatStorage(storage.used_gb) : '0 GB',
+      detail: storage ? `${formatStorage(storage.total_gb)} total - ${storage.usage_percent}%` : 'loading',
+      icon: HardDrive,
+      tone: 'var(--pink)',
+      background: 'rgba(255,0,255,0.10)',
+    },
+  ];
+
   return (
-    <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 className="text-gradient" style={{ fontSize: '2rem', margin: 0, fontWeight: 800 }}>mView Sentinel Overview</h1>
-          <p style={{ color: 'var(--text-muted)', margin: 0, marginTop: 4 }}>System health and real-time alerts</p>
-        </div>
-      </header>
-
-      {/* Row 1: Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem' }}>
-        <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ padding: '1rem', background: 'rgba(0,212,255,0.1)', borderRadius: '12px', color: 'var(--color-primary)' }}>
-            <Camera size={32} />
-          </div>
+    <div style={{ height: '100%', overflowY: 'auto', padding: 18 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minHeight: '100%' }}>
+        <header style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
           <div>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Active Cameras</p>
-            <div className="stat-value" style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-1)' }}>
-              {stats.total_cameras}
-              <span style={{ fontSize: '0.85rem', color: 'var(--color-success)', marginLeft: '8px', fontWeight: 500 }}>
-                {stats.online_cameras} online
-              </span>
-            </div>
+            <h1 style={{ fontSize: '1.35rem', lineHeight: 1.1, margin: 0, fontWeight: 800, color: 'var(--t1)' }}>
+              mView Sentinel Overview
+            </h1>
+            <p style={{ color: 'var(--t2)', margin: '5px 0 0', fontSize: '0.84rem' }}>
+              System health, live cameras, recording status, and AI alerts
+            </p>
           </div>
-        </div>
-        
-        <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ padding: '1rem', background: 'rgba(244,63,94,0.1)', borderRadius: '12px', color: 'var(--color-danger)' }}>
-            <AlertTriangle size={32} />
+          <div style={{ color: 'var(--t3)', fontSize: '0.72rem', fontFamily: 'JetBrains Mono, monospace' }}>
+            Refreshes every 5s
           </div>
-          <div>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>AI Events</p>
-            <div className="stat-value" style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-1)' }}>
-              {stats.events_today}
-              <span style={{ fontSize: '0.85rem', color: 'var(--color-danger)', marginLeft: '8px', fontWeight: 500 }}>
-                Real-time
-              </span>
-            </div>
-          </div>
-        </div>
+        </header>
 
-        <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ padding: '1rem', background: 'rgba(16,185,129,0.1)', borderRadius: '12px', color: 'var(--color-success)' }}>
-            <Activity size={32} />
-          </div>
-          <div>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>System Health</p>
-            <div className="stat-value" style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-1)' }}>
-              OK
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginLeft: '8px', fontWeight: 500 }}>
-                Online
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ padding: '1rem', background: 'rgba(124,58,237,0.1)', borderRadius: '12px', color: 'var(--color-accent)' }}>
-            <HardDrive size={32} />
-          </div>
-          <div>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Storage Used</p>
-            <div className="stat-value" style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-1)' }}>
-              {storage ? `${(storage.used_gb / 1024).toFixed(2)}` : '0.00'}
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginLeft: '4px', fontWeight: 500 }}>
-                TB / {storage ? `${(storage.total_gb / 1024).toFixed(1)}` : '0.0'} TB ({storage ? `${storage.usage_percent}` : '0'}%)
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Row 2: Content */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem' }}>
-        {/* Camera Grid */}
-        <div className="glass-panel" style={{ padding: '1.5rem' }}>
-          <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px', margin: 0, fontSize: '1.1rem', color: 'var(--text-1)' }}>
-            <Play size={20} color="var(--color-primary)" /> Live Camera Grid
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', marginTop: '1.5rem', minHeight: 0 }}>
-            {cameras.length === 0 ? (
-              <div style={{ color: 'var(--text-muted)', padding: '4rem 2rem', textAlign: 'center' }}>
-                No cameras found in database. Go to Settings to adopt ONVIF cameras.
-              </div>
-            ) : (
-              cameras.slice(0, 4).map(cam => (
-                <div key={cam.id} style={{ height: '240px' }}>
-                  <VideoPlayer 
-                    cameraId={cam.id}
-                    name={cam.name}
-                    status={cam.status}
-                    hasMotion={cam.has_motion}
-                  />
+        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(180px, 1fr))', gap: 12 }}>
+          {kpis.map(item => {
+            const Icon = item.icon;
+            return (
+              <div key={item.label} style={{ ...panelStyle, padding: 14, display: 'flex', alignItems: 'center', gap: 12, minHeight: 88 }}>
+                <div style={{ width: 42, height: 42, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: item.background, color: item.tone, flexShrink: 0 }}>
+                  <Icon size={22} />
                 </div>
-              ))
-            )}
-          </div>
-        </div>
+                <div style={{ minWidth: 0 }}>
+                  <div className="card-title">{item.label}</div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6, minWidth: 0 }}>
+                    <span style={{ color: 'var(--t1)', fontSize: '1.3rem', fontWeight: 800, lineHeight: 1 }}>{item.value}</span>
+                    <span style={{ color: item.tone, fontSize: '0.74rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.detail}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </section>
 
-        {/* Events Feed & Chart */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <div className="glass-panel" style={{ padding: '1.5rem', flex: 1, overflowY: 'auto', maxHeight: '400px' }}>
-            <h3 style={{ marginBottom: '1.5rem', margin: 0, fontSize: '1.1rem', color: 'var(--text-1)' }}>Real-Time Events</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
-              {events.length === 0 ? (
-                <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem 0' }}>Waiting for AI detections...</div>
+        <section style={{ display: 'grid', gridTemplateColumns: 'minmax(520px, 1.65fr) minmax(320px, 0.95fr)', gap: 16, alignItems: 'stretch', flex: 1, minHeight: 0 }}>
+          <div style={{ ...panelStyle, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            <div style={sectionHeaderStyle}>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--t1)', fontSize: '0.95rem', margin: 0 }}>
+                <Play size={16} color="var(--cyan)" /> Live Camera Grid
+              </h2>
+              <span className="badge online">{stats.online_cameras}/{stats.total_cameras}</span>
+            </div>
+
+            <div style={{ padding: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12, alignContent: 'start', overflowY: 'auto' }}>
+              {cameras.length === 0 ? (
+                <div className="empty" style={{ minHeight: 300, gridColumn: '1 / -1' }}>
+                  <Camera size={24} />
+                  <div className="empty-title">No Cameras Added</div>
+                  <div className="empty-sub">Add ONVIF cameras or import an existing NVR from Operations.</div>
+                </div>
               ) : (
-                events.map(ev => (
-                  <div key={ev.id} style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '1rem', 
-                    padding: '0.75rem', 
-                    background: 'rgba(255,255,255,0.02)', 
-                    borderRadius: '8px',
-                    borderLeft: `4px solid ${ev.object_class === 'person' ? 'var(--color-danger)' : 'var(--color-primary)'}`
-                  }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <strong style={{ fontSize: '0.85rem', textTransform: 'capitalize', color: 'var(--text-1)' }}>{ev.object_class}</strong>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                          {ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : '--'}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>Camera ID: {ev.camera_id}</div>
-                    </div>
-                    <div style={{ fontSize: '0.75rem', padding: '2px 6px', background: 'rgba(0,212,255,0.1)', borderRadius: '4px', color: 'var(--color-primary)', fontWeight: 600 }}>
-                      {Math.round((ev.confidence || 0) * 100)}%
-                    </div>
+                cameras.slice(0, 6).map(cam => (
+                  <div key={cam.id} style={{ aspectRatio: '16 / 9', minHeight: 210 }}>
+                    <VideoPlayer
+                      cameraId={cam.id}
+                      name={cam.name}
+                      status={cam.status}
+                      hasMotion={cam.has_motion}
+                    />
                   </div>
                 ))
               )}
             </div>
           </div>
 
-          <div className="glass-panel" style={{ padding: '1.5rem', height: '220px' }}>
-            <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem', margin: 0, color: 'var(--text-1)' }}>Activity Trend</h3>
-            {chartData.length === 0 ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '80%', color: 'var(--text-muted)' }}>
-                No historical trend data available.
+          <div style={{ display: 'grid', gridTemplateRows: 'minmax(300px, 1fr) 260px', gap: 16, minHeight: 0 }}>
+            <div style={{ ...panelStyle, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+              <div style={sectionHeaderStyle}>
+                <h2 style={{ color: 'var(--t1)', fontSize: '0.95rem', margin: 0 }}>Real-Time Events</h2>
+                <span className={`badge ${events.length ? 'recording' : 'offline'}`}>{events.length}</span>
               </div>
-            ) : (
-              <div style={{ height: '80%' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData}>
-                    <defs>
-                      <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.4}/>
-                        <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <Tooltip contentStyle={{ background: 'var(--bg-card)', borderColor: 'var(--border)', borderRadius: '8px' }} />
-                    <Area type="monotone" dataKey="count" stroke="var(--color-primary)" fillOpacity={1} fill="url(#colorCount)" />
-                  </AreaChart>
-                </ResponsiveContainer>
+              <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' }}>
+                {events.length === 0 ? (
+                  <div className="empty" style={{ minHeight: 220 }}>
+                    <AlertTriangle size={22} />
+                    <div className="empty-title">Waiting for AI detections</div>
+                  </div>
+                ) : (
+                  events.map(event => (
+                    <div key={event.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.025)' }}>
+                      <div className={`event-dot ${event.object_class === 'person' ? 'person' : event.object_class === 'car' ? 'vehicle' : 'other'}`} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                          <strong style={{ color: 'var(--t1)', fontSize: '0.82rem', textTransform: 'capitalize' }}>{event.object_class || 'event'}</strong>
+                          <span style={{ color: 'var(--t3)', fontSize: '0.7rem', fontFamily: 'JetBrains Mono, monospace' }}>
+                            {event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : '--'}
+                          </span>
+                        </div>
+                        <div style={{ color: 'var(--t3)', fontSize: '0.7rem', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          Camera {event.camera_id}
+                        </div>
+                      </div>
+                      <span style={{ color: 'var(--cyan)', fontSize: '0.72rem', fontWeight: 800 }}>
+                        {Math.round((event.confidence || 0) * 100)}%
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
-            )}
+            </div>
+
+            <div style={{ ...panelStyle, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+              <div style={sectionHeaderStyle}>
+                <h2 style={{ color: 'var(--t1)', fontSize: '0.95rem', margin: 0 }}>Activity Trend</h2>
+              </div>
+              <div style={{ flex: 1, minHeight: 0, padding: 12 }}>
+                {chartData.length === 0 ? (
+                  <div className="empty" style={{ height: '100%' }}>
+                    <div className="empty-title">No historical trend data</div>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData}>
+                      <defs>
+                        <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="var(--cyan)" stopOpacity={0.38} />
+                          <stop offset="95%" stopColor="var(--cyan)" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <Tooltip contentStyle={{ background: 'var(--bg-card)', borderColor: 'var(--border)', borderRadius: 8, color: 'var(--t1)' }} />
+                      <Area type="monotone" dataKey="count" stroke="var(--cyan)" fillOpacity={1} fill="url(#colorCount)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );
