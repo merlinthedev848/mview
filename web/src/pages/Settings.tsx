@@ -123,6 +123,11 @@ interface SystemConfig {
     ice_servers: string[];
     enable_ssl: boolean;
   };
+  updates: {
+    manifest_url: string;
+    auto_download: boolean;
+    check_interval_minutes: number;
+  };
 }
 
 interface UserAccount {
@@ -195,6 +200,11 @@ const defaultSystemConfig: SystemConfig = {
     ice_servers: ['stun:stun.l.google.com:19302'],
     enable_ssl: false,
   },
+  updates: {
+    manifest_url: 'https://updates.chriskendall.media/sentinel/latest.json',
+    auto_download: false,
+    check_interval_minutes: 360,
+  },
 };
 
 const getCurrentUser = (): TokenUser => {
@@ -259,6 +269,10 @@ const Settings: React.FC = () => {
     update_available: boolean;
     current_sha: string;
     latest_sha: string;
+    manifest_url?: string;
+    version?: string;
+    ref?: string;
+    notes?: string;
     error?: string;
   } | null>(null);
   const [updating, setUpdating] = useState(false);
@@ -276,7 +290,10 @@ const Settings: React.FC = () => {
         const data = await res.json();
         setUpdateInfo(data);
         if (data.update_available) {
-          showToast(`Update available! Latest: ${data.latest_sha}`);
+          showToast(`Update available from manifest. Latest: ${data.latest_sha}`);
+          if (systemConfig.updates.auto_download) {
+            await installUpdate();
+          }
         } else if (data.error) {
           showToast(`Update check: ${data.error}`);
         } else {
@@ -296,7 +313,8 @@ const Settings: React.FC = () => {
     try {
       const res = await fetch(apiUrl('/system/updates/install'), { method: 'POST' });
       if (res.ok) {
-        showToast('NVR update initiated. Rebuilding Docker containers...');
+        const data = await res.json();
+        showToast(data.message || 'NVR update initiated. Rebuilding Docker containers...');
       } else {
         const err = await res.json();
         showToast(`Update failed: ${err.detail || 'Unknown error'}`);
@@ -394,6 +412,7 @@ const Settings: React.FC = () => {
           ...data,
           ai: { ...defaultSystemConfig.ai, ...(data.ai || {}) },
           network: { ...defaultSystemConfig.network, ...(data.network || {}) },
+          updates: { ...defaultSystemConfig.updates, ...(data.updates || {}) },
         });
       }
     } catch {}
@@ -414,6 +433,7 @@ const Settings: React.FC = () => {
           ...data,
           ai: { ...defaultSystemConfig.ai, ...(data.ai || {}) },
           network: { ...defaultSystemConfig.network, ...(data.network || {}) },
+          updates: { ...defaultSystemConfig.updates, ...(data.updates || {}) },
         });
         showToast('Configuration updated successfully.');
       } else {
@@ -1497,10 +1517,58 @@ const Settings: React.FC = () => {
                   </div>
                 </div>
 
+                <div style={{ marginTop: 20, padding: 16, border: '1px solid var(--border)', borderRadius: 8, background: 'rgba(255,255,255,0.02)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 600, color: 'var(--text-1)', fontSize: '0.85rem' }}>Auto Update Facility</div>
+                      <div style={{ color: 'var(--text-3)', fontSize: '0.72rem', marginTop: 3 }}>Checks the Sentinel update manifest and downloads the GitHub target in the background when enabled.</div>
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-2)', fontSize: '0.8rem', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={systemConfig.updates.auto_download}
+                        onChange={e => setSystemConfig(c => ({ ...c, updates: { ...c.updates, auto_download: e.target.checked } }))}
+                        style={{ width: 16, height: 16, accentColor: 'var(--cyan)' }}
+                      />
+                      Auto download updates
+                    </label>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px auto', gap: 12, alignItems: 'end' }}>
+                    <div className="form-group">
+                      <label className="form-label">Manifest URL</label>
+                      <input
+                        className="form-input"
+                        value={systemConfig.updates.manifest_url}
+                        onChange={e => setSystemConfig(c => ({ ...c, updates: { ...c.updates, manifest_url: e.target.value } }))}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Check Interval</label>
+                      <select
+                        className="form-select"
+                        value={systemConfig.updates.check_interval_minutes}
+                        onChange={e => setSystemConfig(c => ({ ...c, updates: { ...c.updates, check_interval_minutes: Number(e.target.value) } }))}
+                      >
+                        <option value={15}>15 minutes</option>
+                        <option value={60}>1 hour</option>
+                        <option value={360}>6 hours</option>
+                        <option value={1440}>Daily</option>
+                      </select>
+                    </div>
+                    <button className="btn btn-primary" onClick={() => saveSystemConfig()} disabled={savingConfig}>
+                      {savingConfig ? 'Saving...' : 'Save Update Settings'}
+                    </button>
+                  </div>
+                </div>
+
                 {updateInfo && (
                   <div style={{ marginTop: 20, padding: 16, border: '1px solid var(--border)', borderRadius: 8, background: 'rgba(255,255,255,0.02)' }}>
                     <div style={{ fontWeight: 600, color: 'var(--text-1)', marginBottom: 8, fontSize: '0.85rem' }}>Update Information</div>
                     <div style={{ fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                        <span style={{ color: 'var(--text-2)' }}>Manifest:</span>
+                        <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{updateInfo.manifest_url || systemConfig.updates.manifest_url}</span>
+                      </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span style={{ color: 'var(--text-2)' }}>Current Commit:</span>
                         <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)' }}>{updateInfo.current_sha}</span>
@@ -1509,11 +1577,20 @@ const Settings: React.FC = () => {
                         <span style={{ color: 'var(--text-2)' }}>Latest Commit:</span>
                         <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)' }}>{updateInfo.latest_sha}</span>
                       </div>
+                      {updateInfo.version && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: 'var(--text-2)' }}>Version:</span>
+                          <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)' }}>{updateInfo.version}</span>
+                        </div>
+                      )}
+                      {updateInfo.error && (
+                        <div style={{ color: 'var(--amber)', marginTop: 8 }}>{updateInfo.error}</div>
+                      )}
                       {updateInfo.update_available ? (
                         <div style={{ color: 'var(--cyan)', marginTop: 8, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
                           <span>A new update is available.</span>
                           <button className="btn btn-primary" onClick={installUpdate} disabled={updating} style={{ padding: '4px 10px', fontSize: '0.75rem' }}>
-                            {updating ? 'Updating...' : 'Install Update'}
+                            {updating ? 'Downloading...' : 'Download & Install'}
                           </button>
                         </div>
                       ) : (

@@ -40,6 +40,33 @@ async def retention_worker():
         await asyncio.sleep(12 * 3600)
 
 
+async def auto_update_worker():
+    """Periodically check the Sentinel update manifest and start an update when enabled."""
+    log.info("Starting auto-update background loop...")
+    while True:
+        try:
+            from api.routers.system import _build_update_status, _compose_config, _install_dir, _read_config_file, _start_update_process
+            config = _compose_config(_read_config_file())
+            sleep_seconds = max(15, config.updates.check_interval_minutes) * 60
+            if config.updates.auto_download:
+                status_payload = await _build_update_status()
+                if status_payload.get("update_available") and not status_payload.get("error"):
+                    log.info(
+                        "Update available from manifest %s: %s -> %s",
+                        status_payload.get("manifest_url"),
+                        status_payload.get("current_sha"),
+                        status_payload.get("latest_sha"),
+                    )
+                    _start_update_process(_install_dir(), status_payload["manifest_url"])
+                    return
+                if status_payload.get("error"):
+                    log.warning("Auto-update check failed: %s", status_payload["error"])
+        except Exception as e:
+            log.error("Error in auto-update worker: %s", e)
+            sleep_seconds = 3600
+        await asyncio.sleep(sleep_seconds)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # ── Startup ──────────────────────────────────────────────────────
@@ -88,6 +115,7 @@ async def lifespan(app: FastAPI):
     background_tasks = [
         asyncio.create_task(local_snapshot_worker(), name="local-core-snapshot"),
         asyncio.create_task(retention_worker(), name="retention-worker"),
+        asyncio.create_task(auto_update_worker(), name="auto-update-worker"),
     ]
     from api.services.event_processor import process_mqtt_events
     background_tasks.append(asyncio.create_task(process_mqtt_events(), name="mqtt-event-processor"))
