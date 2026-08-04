@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import hashlib
+import json
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import delete, select
+from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
@@ -86,6 +88,14 @@ class ReviewPayload(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
+class EvidencePackagePayload(BaseModel):
+    event_ids: list[str] = Field(default_factory=list)
+    title: str = Field(default="Evidence package", max_length=160)
+    include_clips: bool = True
+    include_metadata: bool = True
+    watermark: bool = True
+
+
 def _credentials(username: str, password: str) -> str:
     if not username:
         return ""
@@ -160,6 +170,67 @@ def _recording_dir_size() -> dict[str, Any]:
     }
 
 
+def _readiness_score(issues: list[dict[str, Any]], cameras: list[Camera], recorder_status: dict[str, Any], storage: dict[str, Any]) -> dict[str, Any]:
+    score = 100
+    for issue in issues:
+        if issue["severity"] == "critical":
+            score -= 25
+        elif issue["severity"] == "high":
+            score -= 14
+        else:
+            score -= 7
+    if cameras and len(recorder_status) < len([cam for cam in cameras if cam.enabled]):
+        score -= 10
+    if storage["files"] == 0 and cameras:
+        score -= 8
+    score = max(0, min(100, score))
+    if score >= 90:
+        level = "excellent"
+    elif score >= 75:
+        level = "good"
+    elif score >= 55:
+        level = "degraded"
+    else:
+        level = "attention"
+    return {"score": score, "level": level}
+
+
+def _event_payload(event: SemanticEvent, camera_names: dict[str, str]) -> dict[str, Any]:
+    return {
+        "id": event.id,
+        "camera_id": event.camera_id,
+        "camera_name": camera_names.get(event.camera_id, event.camera_id),
+        "object_class": event.object_class,
+        "confidence": event.confidence,
+        "thumbnail_path": event.thumbnail_path,
+        "clip_path": event.clip_path,
+        "timestamp": event.timestamp.isoformat() if event.timestamp else None,
+    }
+
+
+def _naive_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _incident_severity(events: list[Any]) -> str:
+    def value(event: Any, key: str) -> Any:
+        if isinstance(event, dict):
+            return event.get(key)
+        return getattr(event, key, None)
+
+    objects = {value(event, "object_class") for event in events}
+    confidence = max((value(event, "confidence") or 0 for event in events), default=0)
+    if {"person", "face", "license_plate"}.intersection(objects) and confidence >= 0.85:
+        return "critical"
+    if {"person", "car", "truck", "vehicle"}.intersection(objects):
+        return "high"
+    if confidence >= 0.7:
+        return "medium"
+    return "low"
+
+
 @router.get("/health-center")
 async def health_center(db: AsyncSession = Depends(get_db)):
     cameras = (await db.execute(select(Camera))).scalars().all()
@@ -177,9 +248,11 @@ async def health_center(db: AsyncSession = Depends(get_db)):
         issues.append({"scope": "recording", "id": cam.id, "name": cam.name, "severity": "critical", "message": "Recorder is not active for this enabled camera"})
     if not cameras:
         issues.append({"scope": "setup", "severity": "medium", "message": "No cameras have been added yet"})
+    readiness = _readiness_score(issues, cameras, recorder_status, storage)
 
     return {
         "generated_at": datetime.utcnow().isoformat(),
+        "readiness": readiness,
         "summary": {
             "cameras": len(cameras),
             "recording": len(recorder_status),
@@ -202,6 +275,86 @@ async def health_center(db: AsyncSession = Depends(get_db)):
             }
             for event in events
         ],
+    }
+
+
+@router.get("/incidents")
+async def list_incidents(
+    limit: int = 200,
+    window_minutes: int = 10,
+    db: AsyncSession = Depends(get_db),
+):
+    cameras = (await db.execute(select(Camera))).scalars().all()
+    camera_names = {camera.id: camera.name for camera in cameras}
+    rows = (await db.execute(
+        select(SemanticEvent).order_by(desc(SemanticEvent.timestamp)).limit(min(limit, 500))
+    )).scalars().all()
+
+    incidents: list[dict[str, Any]] = []
+    for event in rows:
+        event_time = _naive_utc(event.timestamp or datetime.utcnow())
+        match = None
+        for incident in incidents:
+            if incident["camera_id"] != event.camera_id:
+                continue
+            start = _naive_utc(datetime.fromisoformat(incident["start"].replace("Z", "+00:00")))
+            end = _naive_utc(datetime.fromisoformat(incident["end"].replace("Z", "+00:00")))
+            if start - timedelta(minutes=window_minutes) <= event_time <= end + timedelta(minutes=window_minutes):
+                match = incident
+                break
+        if match is None:
+            match = {
+                "id": f"{event.camera_id}-{event_time.strftime('%Y%m%d%H%M')}",
+                "camera_id": event.camera_id,
+                "camera_name": camera_names.get(event.camera_id, event.camera_id),
+                "start": event_time.isoformat(),
+                "end": event_time.isoformat(),
+                "events": [],
+                "objects": [],
+                "severity": "low",
+                "summary": "",
+            }
+            incidents.append(match)
+
+        match["events"].append(_event_payload(event, camera_names))
+        times = [_naive_utc(datetime.fromisoformat(item["timestamp"].replace("Z", "+00:00"))) for item in match["events"] if item.get("timestamp")]
+        if times:
+            match["start"] = min(times).isoformat()
+            match["end"] = max(times).isoformat()
+        objects = sorted({item["object_class"] or "event" for item in match["events"]})
+        match["objects"] = objects
+        match["severity"] = _incident_severity(match["events"])
+        match["summary"] = f"{len(match['events'])} event{'s' if len(match['events']) != 1 else ''}: {', '.join(objects)}"
+
+    return incidents[:50]
+
+
+@router.post("/evidence-package")
+async def create_evidence_package(payload: EvidencePackagePayload, db: AsyncSession = Depends(get_db)):
+    if not payload.event_ids:
+        raise HTTPException(400, "Select at least one event")
+    events = (await db.execute(
+        select(SemanticEvent).where(SemanticEvent.id.in_(payload.event_ids)).order_by(SemanticEvent.timestamp.asc())
+    )).scalars().all()
+    if not events:
+        raise HTTPException(404, "No matching events found")
+    cameras = (await db.execute(select(Camera))).scalars().all()
+    camera_names = {camera.id: camera.name for camera in cameras}
+    manifest = {
+        "title": payload.title,
+        "generated_at": datetime.utcnow().isoformat(),
+        "watermark": payload.watermark,
+        "include_clips": payload.include_clips,
+        "include_metadata": payload.include_metadata,
+        "events": [_event_payload(event, camera_names) for event in events],
+    }
+    digest = hashlib.sha256(json.dumps(manifest, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+    return {
+        "package_id": digest[:16],
+        "sha256": digest,
+        "event_count": len(events),
+        "camera_count": len({event.camera_id for event in events}),
+        "manifest": manifest,
     }
 
 

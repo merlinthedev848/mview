@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Activity,
   AlertTriangle,
   BellRing,
   CheckCircle,
   DatabaseBackup,
   EyeOff,
+  FileText,
   HeartPulse,
   Network,
   Plus,
@@ -16,7 +18,7 @@ import {
 } from 'lucide-react';
 import { apiUrl } from '../lib/endpoints';
 
-type Tab = 'health' | 'nvrs' | 'rules' | 'privacy' | 'review';
+type Tab = 'health' | 'incidents' | 'nvrs' | 'rules' | 'privacy' | 'review';
 
 const emptyNvr = {
   name: 'Existing NVR',
@@ -78,6 +80,8 @@ const Operations: React.FC = () => {
   const [privacyModes, setPrivacyModes] = useState<any[]>([]);
   const [privacyForm, setPrivacyForm] = useState<any>(emptyPrivacy);
   const [events, setEvents] = useState<any[]>([]);
+  const [incidents, setIncidents] = useState<any[]>([]);
+  const [evidencePackage, setEvidencePackage] = useState<any>(null);
   const [reviews, setReviews] = useState<Record<string, any>>({});
 
   const notify = (message: string) => {
@@ -101,9 +105,10 @@ const Operations: React.FC = () => {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [cameraData, healthData, nvrData, ruleData, privacyData, eventData, reviewData] = await Promise.all([
+      const [cameraData, healthData, incidentData, nvrData, ruleData, privacyData, eventData, reviewData] = await Promise.all([
         fetch(apiUrl('/cameras')).then(r => r.ok ? r.json() : []),
         fetch(apiUrl('/ops-api/health-center')).then(r => r.ok ? r.json() : null),
+        fetch(apiUrl('/ops-api/incidents')).then(r => r.ok ? r.json() : []),
         fetch(apiUrl('/ops-api/nvrs')).then(r => r.ok ? r.json() : []),
         fetch(apiUrl('/ops-api/alert-rules')).then(r => r.ok ? r.json() : []),
         fetch(apiUrl('/ops-api/privacy-modes')).then(r => r.ok ? r.json() : []),
@@ -112,6 +117,7 @@ const Operations: React.FC = () => {
       ]);
       setCameras(cameraData);
       setHealth(healthData);
+      setIncidents(incidentData);
       setNvrs(nvrData);
       setRules(ruleData);
       setPrivacyModes(privacyData);
@@ -195,6 +201,25 @@ const Operations: React.FC = () => {
     }
   };
 
+  const packageIncident = async (incident: any) => {
+    try {
+      const data = await requestJson('/ops-api/evidence-package', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: `${incident.camera_name} incident ${new Date(incident.start).toLocaleString()}`,
+          event_ids: incident.events.map((event: any) => event.id),
+          include_clips: true,
+          include_metadata: true,
+          watermark: true,
+        }),
+      });
+      setEvidencePackage(data);
+      notify(`Evidence package ${data.package_id} prepared.`);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Evidence package failed.');
+    }
+  };
+
   const cameraOptions = useMemo(() => cameras.map(camera => (
     <option key={camera.id} value={camera.id}>{camera.name}</option>
   )), [cameras]);
@@ -215,6 +240,7 @@ const Operations: React.FC = () => {
         <nav className="settings-nav">
           {[
             ['health', HeartPulse, 'Health'],
+            ['incidents', Activity, 'Incidents'],
             ['nvrs', Network, 'NVRs'],
             ['rules', BellRing, 'Rules'],
             ['privacy', EyeOff, 'Privacy'],
@@ -234,14 +260,15 @@ const Operations: React.FC = () => {
             <>
               <div style={grid4}>
                 {[
+                  ['Readiness', `${health?.readiness?.score ?? '--'}%`],
                   ['Cameras', health?.summary?.cameras ?? cameras.length],
                   ['Recording', health?.summary?.recording ?? 0],
-                  ['NVRs', health?.summary?.nvrs ?? nvrs.length],
                   ['Archive', `${health?.summary?.recording_gb ?? 0} GB`],
                 ].map(([label, value]) => (
                   <div className="card" key={label as string} style={{ padding: 18 }}>
                     <div className="card-title">{label as string}</div>
                     <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--t1)', marginTop: 8 }}>{value as any}</div>
+                    {label === 'Readiness' && <div style={{ color: 'var(--t3)', fontSize: '0.72rem', marginTop: 4 }}>{health?.readiness?.level || 'loading'}</div>}
                   </div>
                 ))}
               </div>
@@ -260,6 +287,63 @@ const Operations: React.FC = () => {
                       <div style={{ color: 'var(--t2)', fontSize: '0.76rem', marginTop: 2 }}>{issue.message}</div>
                     </div>
                     <span className={`badge ${issue.severity === 'critical' ? 'recording' : 'offline'}`}>{issue.severity}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {tab === 'incidents' && (
+            <>
+              <div style={grid4}>
+                {[
+                  ['Open Incidents', incidents.length],
+                  ['Critical', incidents.filter(i => i.severity === 'critical').length],
+                  ['Evidence Ready', evidencePackage ? evidencePackage.package_id : 'none'],
+                  ['Reviewed Events', Object.keys(reviews).length],
+                ].map(([label, value]) => (
+                  <div className="card" key={label as string} style={{ padding: 18 }}>
+                    <div className="card-title">{label as string}</div>
+                    <div style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--t1)', marginTop: 8 }}>{value as any}</div>
+                  </div>
+                ))}
+              </div>
+
+              {evidencePackage && (
+                <div className="card">
+                  <div className="card-head">
+                    <span className="card-title">Latest Evidence Manifest</span>
+                    <span className="badge online">{evidencePackage.event_count} events</span>
+                  </div>
+                  <div style={{ padding: 16, display: 'grid', gridTemplateColumns: '180px 1fr', gap: 10, color: 'var(--t2)', fontSize: '0.76rem' }}>
+                    <strong style={{ color: 'var(--t1)' }}>Package ID</strong><span>{evidencePackage.package_id}</span>
+                    <strong style={{ color: 'var(--t1)' }}>SHA-256</strong><span style={{ fontFamily: 'JetBrains Mono, monospace', overflowWrap: 'anywhere' }}>{evidencePackage.sha256}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="card">
+                <div className="card-head">
+                  <span className="card-title">Incident Intelligence</span>
+                  <span className={`badge ${incidents.length ? 'recording' : 'online'}`}>{incidents.length}</span>
+                </div>
+                {incidents.length === 0 ? <div className="empty"><Activity size={22} /><div className="empty-title">No grouped incidents yet</div></div> : incidents.map(incident => (
+                  <div className="cam-row" key={incident.id} style={{ alignItems: 'flex-start' }}>
+                    <AlertTriangle size={16} color={incident.severity === 'critical' ? 'var(--red)' : incident.severity === 'high' ? 'var(--amber)' : 'var(--cyan)'} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <strong>{incident.camera_name}</strong>
+                        <span className={`badge ${incident.severity === 'critical' ? 'recording' : incident.severity === 'high' ? 'offline' : 'online'}`}>{incident.severity}</span>
+                      </div>
+                      <div style={{ color: 'var(--t2)', fontSize: '0.76rem', marginTop: 4 }}>{incident.summary}</div>
+                      <div style={{ color: 'var(--t3)', fontSize: '0.7rem', marginTop: 3 }}>
+                        {new Date(incident.start).toLocaleString()} - {new Date(incident.end).toLocaleTimeString()}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                        {(incident.objects || []).map((objectName: string) => <span className="badge online" key={objectName}>{objectName}</span>)}
+                      </div>
+                    </div>
+                    <button className="btn btn-ghost" onClick={() => packageIncident(incident)}><FileText size={14} /> Evidence</button>
                   </div>
                 ))}
               </div>
