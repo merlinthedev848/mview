@@ -80,10 +80,6 @@ async def _scan_subnet(subnet: str, max_concurrent: int = 64) -> list[dict]:
 
 def _get_local_subnets() -> list[str]:
     """Detect the local subnets the machine is on."""
-    import socket
-    import struct
-    import os
-
     subnets = []
     try:
         import netifaces
@@ -206,6 +202,71 @@ class ONVIFService:
         except Exception as e:
             logger.error(f"ONVIF connect failed for {ip}: {e}")
             return None
+
+    def move_ptz(self, onvif_endpoint: str, username: str, password: str, action: str, speed: float = 0.5) -> bool:
+        """Send a continuous ONVIF PTZ move command."""
+        try:
+            cam = self._connect_from_endpoint(onvif_endpoint, username, password)
+            media = cam.create_media_service()
+            ptz = cam.create_ptz_service()
+            profile = media.GetProfiles()[0]
+            request = ptz.create_type("ContinuousMove")
+            request.ProfileToken = profile.token
+            x, y, z = self._ptz_velocity(action, speed)
+            request.Velocity = {
+                "PanTilt": {"x": x, "y": y},
+                "Zoom": {"x": z},
+            }
+            ptz.ContinuousMove(request)
+            return True
+        except Exception as e:
+            logger.error("PTZ move failed for %s: %s", onvif_endpoint, e)
+            return False
+
+    def stop_ptz(self, onvif_endpoint: str, username: str, password: str) -> bool:
+        """Stop ONVIF PTZ movement."""
+        try:
+            cam = self._connect_from_endpoint(onvif_endpoint, username, password)
+            media = cam.create_media_service()
+            ptz = cam.create_ptz_service()
+            profile = media.GetProfiles()[0]
+            request = ptz.create_type("Stop")
+            request.ProfileToken = profile.token
+            request.PanTilt = True
+            request.Zoom = True
+            ptz.Stop(request)
+            return True
+        except Exception as e:
+            logger.error("PTZ stop failed for %s: %s", onvif_endpoint, e)
+            return False
+
+    def _connect_from_endpoint(self, onvif_endpoint: str, username: str, password: str):
+        from onvif import ONVIFCamera
+        import os
+
+        parsed = urllib.parse.urlparse(onvif_endpoint)
+        if not parsed.hostname:
+            raise ValueError("Invalid ONVIF endpoint")
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        wsdl_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'wsdl')
+        return ONVIFCamera(parsed.hostname, port, username, password, wsdl_dir=wsdl_dir)
+
+    @staticmethod
+    def _ptz_velocity(action: str, speed: float) -> tuple[float, float, float]:
+        speed = max(0.0, min(1.0, speed))
+        if action == "left":
+            return -speed, 0.0, 0.0
+        if action == "right":
+            return speed, 0.0, 0.0
+        if action == "up":
+            return 0.0, speed, 0.0
+        if action == "down":
+            return 0.0, -speed, 0.0
+        if action == "zoom_in":
+            return 0.0, 0.0, speed
+        if action == "zoom_out":
+            return 0.0, 0.0, -speed
+        raise ValueError(f"Unsupported PTZ action: {action}")
 
 
 onvif_service = ONVIFService()

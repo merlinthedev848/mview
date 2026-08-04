@@ -4,9 +4,24 @@ import VideoPlayer from '../components/VideoPlayer';
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
 import { apiUrl } from '../lib/endpoints';
 
+interface DashboardCamera {
+  id: string;
+  name: string;
+  status: 'online' | 'offline' | 'recording';
+  has_motion?: boolean;
+}
+
+interface DashboardEvent {
+  id: string;
+  camera_id: string;
+  object_class?: string;
+  confidence?: number;
+  timestamp?: string;
+}
+
 export const Dashboard = () => {
-  const [cameras, setCameras] = useState([]);
-  const [events, setEvents] = useState([]);
+  const [cameras, setCameras] = useState<DashboardCamera[]>([]);
+  const [events, setEvents] = useState<DashboardEvent[]>([]);
   const [storage, setStorage] = useState<{ total_gb: number; used_gb: number; usage_percent: number } | null>(null);
   const [stats, setStats] = useState({ total_cameras: 0, online_cameras: 0, events_today: 0 });
 
@@ -16,19 +31,19 @@ export const Dashboard = () => {
         // Fetch cameras
         const camRes = await fetch(apiUrl('/cameras'));
         if (camRes.ok) {
-          const camData = await camRes.json();
+          const camData = await camRes.json() as DashboardCamera[];
           setCameras(camData);
           setStats(s => ({ 
             ...s, 
             total_cameras: camData.length, 
-            online_cameras: camData.filter((c: any) => c.status === 'online').length 
+            online_cameras: camData.filter(c => c.status === 'online' || c.status === 'recording').length
           }));
         }
 
         // Fetch events
         const eventRes = await fetch(apiUrl('/events?limit=20'));
         if (eventRes.ok) {
-          const eventData = await eventRes.json();
+          const eventData = await eventRes.json() as DashboardEvent[];
           setEvents(eventData);
           setStats(s => ({ ...s, events_today: eventData.length }));
         }
@@ -145,7 +160,7 @@ export const Dashboard = () => {
                 No cameras found in database. Go to Settings to adopt ONVIF cameras.
               </div>
             ) : (
-              cameras.slice(0, 4).map((cam: any) => (
+              cameras.slice(0, 4).map(cam => (
                 <div key={cam.id} style={{ height: '240px' }}>
                   <VideoPlayer 
                     cameraId={cam.id}
@@ -167,7 +182,7 @@ export const Dashboard = () => {
               {events.length === 0 ? (
                 <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem 0' }}>Waiting for AI detections...</div>
               ) : (
-                events.map((ev: any) => (
+                events.map(ev => (
                   <div key={ev.id} style={{ 
                     display: 'flex', 
                     alignItems: 'center', 
@@ -181,7 +196,7 @@ export const Dashboard = () => {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <strong style={{ fontSize: '0.85rem', textTransform: 'capitalize', color: 'var(--text-1)' }}>{ev.object_class}</strong>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                          {new Date(ev.timestamp).toLocaleTimeString()}
+                          {ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : '--'}
                         </span>
                       </div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>Camera ID: {ev.camera_id}</div>

@@ -1338,6 +1338,7 @@ const Settings: React.FC = () => {
           )}
 
           {tab === 'system' && (
+            <>
             <div className="card">
               <div className="card-head"><span className="card-title">System Information & Maintenance</span></div>
               <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -1613,6 +1614,7 @@ const Settings: React.FC = () => {
                 </div>
               </div>
             )}
+            </>
           )}
 
           {tab === 'users' && (

@@ -2,15 +2,27 @@ import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, SafeAreaView } from 'react-native';
 
-// Simple mocked connection context
-// In a real app, this would use AsyncStorage to persist the URL
 export default function App() {
   const [serverUrl, setServerUrl] = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [health, setHealth] = useState<any>(null);
 
-  const handleConnect = () => {
+  const fetchHealth = async (url: string) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
+    try {
+      const res = await fetch(`${url}/system/health`, { signal: controller.signal });
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      return await res.json();
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
+
+  const handleConnect = async () => {
     if (!serverUrl) {
       setError('Please enter a server address');
       return;
@@ -25,18 +37,37 @@ export default function App() {
     setIsConnecting(true);
     setError(null);
 
-    // Simulate API connection delay
-    setTimeout(() => {
-      // In reality, we'd ping formattedUrl + '/system/health'
+    try {
+      const nextHealth = await fetchHealth(formattedUrl);
+      setHealth(nextHealth);
+      setBaseUrl(formattedUrl);
       setIsConnecting(false);
       setIsConnected(true);
-    }, 1500);
+    } catch (e) {
+      setIsConnecting(false);
+      setError(e instanceof Error ? e.message : 'Unable to reach Sentinel server');
+    }
   };
 
   const handleDisconnect = () => {
     setIsConnected(false);
+    setHealth(null);
+    setBaseUrl('');
     setServerUrl('');
   };
+
+  useEffect(() => {
+    if (!isConnected || !baseUrl) return;
+    const timer = setInterval(async () => {
+      try {
+        setHealth(await fetchHealth(baseUrl));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Lost connection to Sentinel server');
+        setIsConnected(false);
+      }
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [isConnected, baseUrl]);
 
   // -------------------------------------------------------------
   // SCREEN: Server Setup
@@ -114,8 +145,12 @@ export default function App() {
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Live Cameras</Text>
-          <Text style={{ color: 'var(--text-muted, #a1a1aa)', marginTop: 10 }}>
-            Connected to {serverUrl}
+          <Text style={{ color: '#a1a1aa', marginTop: 10 }}>
+            Connected to {baseUrl}
+          </Text>
+          <Text style={{ color: '#a1a1aa', marginTop: 10 }}>
+            CPU {typeof health?.cpu_usage_percent === 'number' ? `${health.cpu_usage_percent.toFixed(1)}%` : '--'} ·
+            Disk {typeof health?.storage?.usage_percent === 'number' ? `${health.storage.usage_percent}%` : '--'}
           </Text>
         </View>
 

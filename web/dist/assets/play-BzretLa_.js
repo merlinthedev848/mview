@@ -1,0 +1,1 @@
+import{c as e}from"./index-CVu0HMB2.js";var t=e(`Play`,[[`polygon`,{points:`5 3 19 12 5 21 5 3`,key:`191637`}]]);export{t};

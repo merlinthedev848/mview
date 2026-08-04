@@ -1,17 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import text
+from sqlalchemy import delete, text
 import asyncio
 import psutil
 import shutil
 import os
+import sys
 import yaml
 from pathlib import Path
 from api.config import settings
 from api.services.local_core import local_core, sse_pack
 from api.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
+from api.models.ai import Face, SemanticEvent
+from api.models.camera import Camera
 from api.routers.auth import get_current_user
 from api.services.recorder import purge_all_recordings
 
@@ -168,6 +171,7 @@ async def purge_recordings(camera_id: str | None = Query(default=None)):
     from api.services.recorder import purge_all_recordings, storage_report
     result = await asyncio.to_thread(purge_all_recordings, camera_id)
     report = await asyncio.to_thread(storage_report)
+    await local_core.refresh_snapshot(include_storage=True)
     return {"status": "purged", **result, "storage_report": report}
 
 
@@ -230,12 +234,15 @@ async def factory_reset(
     except Exception as e:
         print(f"Error purging recordings during factory reset: {e}")
 
-    # 3. Wipe all tables except users (or wipe users too? let's wipe everything except the initial admin)
-    # The safest way is to truncate tables using SQLAlchemy raw SQL
+    # 3. Wipe all tables except users. Use TRUNCATE on Postgres and portable deletes elsewhere.
     try:
-        await db.execute(text("TRUNCATE TABLE semantic_events CASCADE;"))
-        await db.execute(text("TRUNCATE TABLE faces CASCADE;"))
-        await db.execute(text("TRUNCATE TABLE cameras CASCADE;"))
+        bind = db.get_bind()
+        if bind and bind.dialect.name == "postgresql":
+            await db.execute(text("TRUNCATE TABLE semantic_events, faces, cameras CASCADE;"))
+        else:
+            await db.execute(delete(SemanticEvent))
+            await db.execute(delete(Face))
+            await db.execute(delete(Camera))
         await db.commit()
     except Exception as e:
         await db.rollback()
@@ -245,9 +252,10 @@ async def factory_reset(
     if CONFIG_PATH.is_file():
         try:
             CONFIG_PATH.unlink()
-        except:
+        except Exception:
             pass
 
+    await local_core.refresh_snapshot(include_storage=True)
     return {"status": "success", "message": "Factory reset complete. System will now restart."}
 
 
@@ -326,12 +334,31 @@ async def install_updates(current_user: dict = Depends(get_current_user)):
         if not (install_dir / ".git").is_dir():
             raise HTTPException(status_code=400, detail="Not a git repository, cannot auto-update")
 
-    # Run the update in a detached background subprocess so it doesn't block the API response
-    # We sleep briefly to let the API response complete first
-    cmd = f"sleep 2 && cd {install_dir} && git fetch --all && git reset --hard origin/main && git clean -fd && docker compose up -d --build"
+    script = """
+import pathlib
+import subprocess
+import sys
+import time
+
+install_dir = pathlib.Path(sys.argv[1])
+time.sleep(2)
+commands = [
+    ["git", "fetch", "--all"],
+    ["git", "reset", "--hard", "origin/main"],
+    ["git", "clean", "-fd"],
+    ["docker", "compose", "up", "-d", "--build"],
+]
+for command in commands:
+    subprocess.run(command, cwd=install_dir, check=True)
+"""
     try:
         import subprocess
-        subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+        subprocess.Popen(
+            [sys.executable, "-c", script, str(install_dir)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=os.name != "nt",
+        )
         return {
             "status": "success",
             "message": "Update initiated successfully. The NVR will pull changes and restart."

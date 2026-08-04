@@ -2,6 +2,7 @@ import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List
@@ -11,6 +12,7 @@ from api.models.camera import Camera
 from api.schemas.camera import CameraResponse, CameraCreate, CameraUpdate, ONVIFDiscoveryResult
 from api.services.onvif_service import onvif_service
 from api.services.recorder import recorder_manager
+from api.services.local_core import local_core
 
 router = APIRouter(prefix="/cameras", tags=["Cameras"])
 
@@ -18,6 +20,12 @@ router = APIRouter(prefix="/cameras", tags=["Cameras"])
 async def _refresh_recorder(db: AsyncSession):
     result = await db.execute(select(Camera))
     await recorder_manager.sync_cameras(result.scalars().all())
+    await local_core.refresh_snapshot()
+
+
+class PTZMove(BaseModel):
+    action: str = Field(pattern="^(up|down|left|right|zoom_in|zoom_out)$")
+    speed: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
 @router.get("", response_model=List[CameraResponse])
@@ -112,6 +120,48 @@ async def get_camera_snapshot(camera_id: str, db: AsyncSession = Depends(get_db)
         raise HTTPException(502, detail)
 
     return Response(content=stdout, media_type="image/jpeg")
+
+
+@router.post("/{camera_id}/ptz/move")
+async def move_camera_ptz(camera_id: str, command: PTZMove, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Camera).where(Camera.id == camera_id))
+    cam = result.scalar_one_or_none()
+    if not cam:
+        raise HTTPException(404, "Camera not found")
+    if not cam.onvif_endpoint:
+        raise HTTPException(400, "Camera has no ONVIF endpoint configured")
+
+    ok = await asyncio.to_thread(
+        onvif_service.move_ptz,
+        cam.onvif_endpoint,
+        cam.onvif_username or "",
+        cam.onvif_password or "",
+        command.action,
+        command.speed,
+    )
+    if not ok:
+        raise HTTPException(502, "PTZ move command failed")
+    return {"status": "moving", "action": command.action}
+
+
+@router.post("/{camera_id}/ptz/stop")
+async def stop_camera_ptz(camera_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Camera).where(Camera.id == camera_id))
+    cam = result.scalar_one_or_none()
+    if not cam:
+        raise HTTPException(404, "Camera not found")
+    if not cam.onvif_endpoint:
+        raise HTTPException(400, "Camera has no ONVIF endpoint configured")
+
+    ok = await asyncio.to_thread(
+        onvif_service.stop_ptz,
+        cam.onvif_endpoint,
+        cam.onvif_username or "",
+        cam.onvif_password or "",
+    )
+    if not ok:
+        raise HTTPException(502, "PTZ stop command failed")
+    return {"status": "stopped"}
 
 
 @router.post("/discover", response_model=List[ONVIFDiscoveryResult])
