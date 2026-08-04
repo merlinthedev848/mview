@@ -12,7 +12,7 @@ WORKDIR /app
 
 # Copy dependencies first to cache the pip install layer
 COPY requirements.txt .
-RUN pip install uv && uv pip install --system --no-cache -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+RUN pip install uv && uv pip install --system --no-cache -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu --index-strategy unsafe-best-match
 
 # Copy source code
 COPY . .
