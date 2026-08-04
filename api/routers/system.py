@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, text
+from sqlalchemy import delete, select, text
 import asyncio
 import psutil
 import shutil
 import os
 import sys
 import yaml
+import json
 from pathlib import Path
 from api.config import settings
 from api.services.local_core import local_core, sse_pack
@@ -15,12 +16,14 @@ from api.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.ai import Face, SemanticEvent
 from api.models.camera import Camera
+from api.models.user import User
 from api.routers.auth import get_current_user
 from api.services.recorder import purge_all_recordings
 
 router = APIRouter(prefix="/system", tags=["system"])
 
 CONFIG_PATH = Path(os.environ.get("SENTINEL_CONFIG_FILE", "sentinel.yml"))
+EXPORT_DIR = Path(settings.export_path)
 
 
 class AIConfig(BaseModel):
@@ -166,6 +169,48 @@ async def get_stream_diagnostics():
     return recorder_manager.diagnostics()
 
 
+@router.post("/backup")
+async def backup_database(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can create backups")
+
+    EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = __import__("datetime").datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    backup_path = EXPORT_DIR / f"mview-backup-{timestamp}.json"
+
+    async def rows(model):
+        result = await db.execute(select(model))
+        payload = []
+        for obj in result.scalars().all():
+            item = {}
+            for column in obj.__table__.columns:
+                value = getattr(obj, column.name)
+                if hasattr(value, "isoformat"):
+                    value = value.isoformat()
+                item[column.name] = value
+            payload.append(item)
+        return payload
+
+    payload = {
+        "created_at": timestamp,
+        "version": settings.app_version,
+        "config": _read_config_file(),
+        "cameras": await rows(Camera),
+        "users": await rows(User),
+        "faces": await rows(Face),
+        "semantic_events": await rows(SemanticEvent),
+    }
+    backup_path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+    return FileResponse(
+        str(backup_path),
+        media_type="application/json",
+        filename=backup_path.name,
+    )
+
+
 @router.post("/recordings/purge")
 async def purge_recordings(camera_id: str | None = Query(default=None)):
     from api.services.recorder import purge_all_recordings, storage_report
@@ -257,6 +302,42 @@ async def factory_reset(
 
     await local_core.refresh_snapshot(include_storage=True)
     return {"status": "success", "message": "Factory reset complete. System will now restart."}
+
+
+@router.post("/restart")
+async def restart_services(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can restart services")
+
+    install_dir = Path("/opt/mview-sentinel")
+    if not install_dir.is_dir() or not (install_dir / "docker-compose.yml").is_file():
+        install_dir = Path(os.getcwd())
+    if not (install_dir / "docker-compose.yml").is_file():
+        raise HTTPException(status_code=400, detail="docker-compose.yml not found; restart is unavailable here")
+    if not shutil.which("docker"):
+        raise HTTPException(status_code=400, detail="Docker is not available in this environment")
+
+    script = """
+import pathlib
+import subprocess
+import sys
+import time
+
+install_dir = pathlib.Path(sys.argv[1])
+time.sleep(2)
+subprocess.run(["docker", "compose", "restart", "api", "detector"], cwd=install_dir, check=True)
+"""
+    try:
+        import subprocess
+        subprocess.Popen(
+            [sys.executable, "-c", script, str(install_dir)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=os.name != "nt",
+        )
+        return {"status": "success", "message": "Restart initiated for API and detector services."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start restart process: {e}")
 
 
 @router.get("/updates/check")

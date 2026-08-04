@@ -131,6 +131,7 @@ async def auth_middleware(request: Request, call_next):
         ("/recordings-list", {"playback"}),
         ("/recordings", {"playback"}),
         ("/events", {"events"}),
+        ("/maps", {"live", "settings"}),
         ("/system/live", {"live", "settings"}),
         ("/system", {"settings"}),
         ("/users", {"settings"}),
@@ -293,4 +294,3 @@ async def serve_spa(request: Request, full_path: str):
 
     # Graceful fallback if the frontend was never built
     return HTMLResponse(FALLBACK_HTML, status_code=200)
-

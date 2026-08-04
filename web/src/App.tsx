@@ -1,6 +1,5 @@
 import React, { Suspense, lazy, useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
-import { Video, PlaySquare, Bell, Settings as SettingsIcon, ShieldCheck, HardDrive, LogOut, Wifi, LayoutDashboard } from 'lucide-react';
+import { Video, PlaySquare, Bell, Settings as SettingsIcon, ShieldCheck, HardDrive, LogOut, Wifi, LayoutDashboard, Map as MapIcon } from 'lucide-react';
 
 import Login     from './pages/Login';
 import { apiUrl } from './lib/endpoints';
@@ -9,6 +8,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const LiveView = lazy(() => import('./pages/LiveView'));
 const Playback = lazy(() => import('./pages/Playback'));
 const Events = lazy(() => import('./pages/Events'));
+const MapView = lazy(() => import('./pages/MapView'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Wallboard = lazy(() => import('./pages/Wallboard'));
 
@@ -37,7 +37,32 @@ window.fetch = async (...args) => {
   return res;
 };
 
-const Sidebar = ({ onLogout }: { onLogout: () => void }) => {
+type NavItem = {
+  to: string;
+  label: string;
+  icon: React.ReactNode;
+  end: boolean;
+  badge?: number;
+};
+
+const normalizePath = (path: string) => {
+  const normalized = path.replace(/\/+$/, '');
+  return normalized || '/';
+};
+
+const navigateTo = (path: string) => {
+  if (normalizePath(window.location.pathname) === normalizePath(path)) return;
+  window.history.pushState({}, '', path);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+};
+
+const isActivePath = (currentPath: string, item: NavItem) => {
+  const current = normalizePath(currentPath);
+  const target = normalizePath(item.to);
+  return item.end ? current === target : current === target || current.startsWith(`${target}/`);
+};
+
+const Sidebar = ({ onLogout, currentPath }: { onLogout: () => void; currentPath: string }) => {
   const [cameras, setCameras] = useState<any[]>([]);
   const [events,  setEvents]  = useState<any[]>([]);
   const [storage, setStorage] = useState<any>(null);
@@ -114,11 +139,12 @@ const Sidebar = ({ onLogout }: { onLogout: () => void }) => {
   const onlineCams = cameras.filter(c => c.status !== 'offline').length;
   const unreadEvents = events.length;
 
-  const navItems = [
+  const navItems: NavItem[] = [
     { to: '/',         label: 'Dashboard',  icon: <LayoutDashboard size={16} />, end: true  },
     { to: '/live',     label: 'Live View',  icon: <Video           size={16} />, end: false },
     { to: '/playback', label: 'Playback',   icon: <PlaySquare      size={16} />, end: false },
     { to: '/events',   label: 'Events',     icon: <Bell            size={16} />, end: false, badge: unreadEvents || undefined },
+    { to: '/map',      label: 'Map',        icon: <MapIcon         size={16} />, end: false },
     { to: '/settings', label: 'Settings',   icon: <SettingsIcon    size={16} />, end: false },
   ];
 
@@ -140,16 +166,19 @@ const Sidebar = ({ onLogout }: { onLogout: () => void }) => {
         <div className="nav-section">Navigation</div>
 
         {navItems.map(item => (
-          <NavLink
+          <a
             key={item.to}
-            to={item.to}
-            end={item.end}
-            className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+            href={item.to}
+            className={`nav-item${isActivePath(currentPath, item) ? ' active' : ''}`}
+            onClick={(event) => {
+              event.preventDefault();
+              navigateTo(item.to);
+            }}
           >
             {item.icon}
             {item.label}
             {item.badge ? <span className="nav-badge">{item.badge > 99 ? '99+' : item.badge}</span> : null}
-          </NavLink>
+          </a>
         ))}
 
         <div className="nav-section">System</div>
@@ -209,13 +238,21 @@ const Sidebar = ({ onLogout }: { onLogout: () => void }) => {
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('mview_token'));
+  const [currentPath, setCurrentPath] = useState(normalizePath(window.location.pathname));
 
   useEffect(() => {
     const handleStorage = () => {
       setToken(localStorage.getItem('mview_token'));
     };
+    const handleRoute = () => {
+      setCurrentPath(normalizePath(window.location.pathname));
+    };
     window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    window.addEventListener('popstate', handleRoute);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('popstate', handleRoute);
+    };
   }, []);
 
   const handleLogin = (t: string) => {
@@ -234,31 +271,30 @@ function App() {
 
   if (window.location.pathname === '/wallboard') {
     return (
-      <Router>
-        <Suspense fallback={<div className="empty">Loading...</div>}>
-          <Wallboard />
-        </Suspense>
-      </Router>
+      <Suspense fallback={<div className="empty">Loading...</div>}>
+        <Wallboard />
+      </Suspense>
     );
   }
 
+  const routes: Record<string, React.ReactNode> = {
+    '/': <Dashboard />,
+    '/live': <LiveView />,
+    '/playback': <Playback />,
+    '/events': <Events />,
+    '/map': <MapView />,
+    '/settings': <Settings />,
+  };
+
   return (
-    <Router>
-      <div className="app-shell">
-        <Sidebar onLogout={handleLogout} />
-        <div className="main-content">
-          <Suspense fallback={<div className="empty">Loading...</div>}>
-            <Routes>
-              <Route path="/"         element={<Dashboard />} />
-              <Route path="/live"     element={<LiveView />}  />
-              <Route path="/playback" element={<Playback />}  />
-              <Route path="/events"   element={<Events />}    />
-              <Route path="/settings" element={<Settings />}  />
-            </Routes>
-          </Suspense>
-        </div>
+    <div className="app-shell">
+      <Sidebar onLogout={handleLogout} currentPath={currentPath} />
+      <div className="main-content">
+        <Suspense fallback={<div className="empty">Loading...</div>}>
+          {routes[currentPath] ?? <Dashboard />}
+        </Suspense>
       </div>
-    </Router>
+    </div>
   );
 }
 

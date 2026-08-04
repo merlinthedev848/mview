@@ -261,6 +261,8 @@ const Settings: React.FC = () => {
     error?: string;
   } | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [backingUp, setBackingUp] = useState(false);
+  const [restarting, setRestarting] = useState(false);
   const [factoryResetting, setFactoryResetting] = useState(false);
   const [showFactoryResetConfirm, setShowFactoryResetConfirm] = useState(false);
   const [factoryResetConfirmText, setFactoryResetConfirmText] = useState('');
@@ -302,6 +304,49 @@ const Settings: React.FC = () => {
       showToast('Network error initiating update.');
     }
     setUpdating(false);
+  };
+
+  const backupDatabase = async () => {
+    setBackingUp(true);
+    try {
+      const res = await fetch(apiUrl('/system/backup'), { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Backup failed.');
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get('content-disposition') || '';
+      const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
+      const filename = filenameMatch?.[1] || `mview-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      showToast('Backup downloaded.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Backup failed.');
+    } finally {
+      setBackingUp(false);
+    }
+  };
+
+  const restartServices = async () => {
+    if (!confirm('Restart the API and detector services now?')) return;
+    setRestarting(true);
+    try {
+      const res = await fetch(apiUrl('/system/restart'), { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Restart failed.');
+      showToast(data.message || 'Restart initiated.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Restart failed.');
+    } finally {
+      setRestarting(false);
+    }
   };
 
   const handleFactoryReset = async () => {
@@ -1481,8 +1526,12 @@ const Settings: React.FC = () => {
                   <button className="btn btn-ghost" style={{ padding: '8px 16px' }} onClick={checkUpdates} disabled={checkingUpdates}>
                     <Loader size={14} className={checkingUpdates ? 'spin' : ''}/> Check for Updates
                   </button>
-                  <button className="btn btn-ghost" style={{ padding: '8px 16px' }}><Edit2 size={14}/> Backup Database</button>
-                  <button className="btn btn-danger" style={{ padding: '8px 16px', marginLeft: 'auto' }}>Restart NVR Service</button>
+                  <button className="btn btn-ghost" style={{ padding: '8px 16px' }} onClick={backupDatabase} disabled={backingUp}>
+                    <Edit2 size={14}/>{backingUp ? 'Preparing Backup...' : 'Backup Database'}
+                  </button>
+                  <button className="btn btn-danger" style={{ padding: '8px 16px', marginLeft: 'auto' }} onClick={restartServices} disabled={restarting}>
+                    {restarting ? 'Restarting...' : 'Restart NVR Service'}
+                  </button>
                 </div>
               </div>
             </div>

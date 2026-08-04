@@ -1,4 +1,4 @@
-FROM python:3.12-slim-bookworm
+FROM python:3.13-slim-bookworm
 
 # Install system dependencies required for OpenCV and ONNX
 RUN apt-get update && apt-get install -y \

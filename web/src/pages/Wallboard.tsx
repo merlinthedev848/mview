@@ -153,7 +153,7 @@ const Wallboard: React.FC = () => {
         onMouseLeave={(e) => e.currentTarget.style.opacity = '0.5'}
       >
         <button 
-          onClick={() => window.location.href = '/dashboard'}
+          onClick={() => window.location.href = '/'}
           style={{ background: '#ff3b6b', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}
         >
           Exit Wallboard
