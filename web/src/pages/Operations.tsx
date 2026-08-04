@@ -4,11 +4,14 @@ import {
   AlertTriangle,
   BellRing,
   CheckCircle,
+  Cloud,
   DatabaseBackup,
   EyeOff,
   FileText,
+  HardDrive,
   HeartPulse,
   Network,
+  Plug,
   Plus,
   RefreshCw,
   Save,
@@ -18,7 +21,7 @@ import {
 } from 'lucide-react';
 import { apiUrl } from '../lib/endpoints';
 
-type Tab = 'health' | 'incidents' | 'nvrs' | 'rules' | 'privacy' | 'review';
+type Tab = 'health' | 'incidents' | 'cases' | 'nvrs' | 'rules' | 'storage' | 'privacy' | 'integrations' | 'sites' | 'review';
 
 const emptyNvr = {
   name: 'Existing NVR',
@@ -56,6 +59,46 @@ const emptyPrivacy = {
   reason: 'Private household hours',
 };
 
+const emptyCase = {
+  title: 'New security case',
+  status: 'open',
+  severity: 'medium',
+  assigned_to: '',
+  event_ids: [] as string[],
+  incident_id: '',
+  notes: '',
+  locked: false,
+};
+
+const emptyPolicy = {
+  name: 'Default camera retention',
+  enabled: true,
+  camera_ids: [] as string[],
+  retention_days: 30,
+  event_retention_days: 90,
+  archive_target: 'local',
+  lock_evidence: true,
+  record_mode: 'continuous',
+};
+
+const emptyIntegration = {
+  name: 'Critical incident webhook',
+  kind: 'webhook',
+  enabled: true,
+  target: '',
+  events: ['critical_incident', 'camera_offline'],
+  secret_ref: '',
+};
+
+const emptySite = {
+  name: 'Main site',
+  role: 'recorder',
+  endpoint: '',
+  enabled: true,
+  location: '',
+  notes: '',
+};
+
 const grid2: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 14 };
 const grid4: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 14 };
 
@@ -82,6 +125,16 @@ const Operations: React.FC = () => {
   const [events, setEvents] = useState<any[]>([]);
   const [incidents, setIncidents] = useState<any[]>([]);
   const [evidencePackage, setEvidencePackage] = useState<any>(null);
+  const [evidencePackages, setEvidencePackages] = useState<any[]>([]);
+  const [cases, setCases] = useState<any[]>([]);
+  const [caseForm, setCaseForm] = useState<any>(emptyCase);
+  const [policies, setPolicies] = useState<any[]>([]);
+  const [policyForm, setPolicyForm] = useState<any>(emptyPolicy);
+  const [forecast, setForecast] = useState<any>(null);
+  const [integrations, setIntegrations] = useState<any[]>([]);
+  const [integrationForm, setIntegrationForm] = useState<any>(emptyIntegration);
+  const [sites, setSites] = useState<any[]>([]);
+  const [siteForm, setSiteForm] = useState<any>(emptySite);
   const [reviews, setReviews] = useState<Record<string, any>>({});
 
   const notify = (message: string) => {
@@ -105,22 +158,34 @@ const Operations: React.FC = () => {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [cameraData, healthData, incidentData, nvrData, ruleData, privacyData, eventData, reviewData] = await Promise.all([
+      const [cameraData, healthData, incidentData, caseData, evidenceData, nvrData, ruleData, policyData, forecastData, privacyData, integrationData, siteData, eventData, reviewData] = await Promise.all([
         fetch(apiUrl('/cameras')).then(r => r.ok ? r.json() : []),
         fetch(apiUrl('/ops-api/health-center')).then(r => r.ok ? r.json() : null),
         fetch(apiUrl('/ops-api/incidents')).then(r => r.ok ? r.json() : []),
+        fetch(apiUrl('/ops-api/cases')).then(r => r.ok ? r.json() : []),
+        fetch(apiUrl('/ops-api/evidence-packages')).then(r => r.ok ? r.json() : []),
         fetch(apiUrl('/ops-api/nvrs')).then(r => r.ok ? r.json() : []),
         fetch(apiUrl('/ops-api/alert-rules')).then(r => r.ok ? r.json() : []),
+        fetch(apiUrl('/ops-api/storage-policies')).then(r => r.ok ? r.json() : []),
+        fetch(apiUrl('/ops-api/storage-forecast')).then(r => r.ok ? r.json() : null),
         fetch(apiUrl('/ops-api/privacy-modes')).then(r => r.ok ? r.json() : []),
+        fetch(apiUrl('/ops-api/integrations')).then(r => r.ok ? r.json() : []),
+        fetch(apiUrl('/ops-api/sites')).then(r => r.ok ? r.json() : []),
         fetch(apiUrl('/events?limit=25')).then(r => r.ok ? r.json() : []),
         fetch(apiUrl('/ops-api/event-reviews')).then(r => r.ok ? r.json() : []),
       ]);
       setCameras(cameraData);
       setHealth(healthData);
       setIncidents(incidentData);
+      setCases(caseData);
+      setEvidencePackages(evidenceData);
       setNvrs(nvrData);
       setRules(ruleData);
+      setPolicies(policyData);
+      setForecast(forecastData);
       setPrivacyModes(privacyData);
+      setIntegrations(integrationData);
+      setSites(siteData);
       setEvents(eventData);
       setReviews(Object.fromEntries(reviewData.map((r: any) => [r.event_id, r])));
     } catch (error) {
@@ -201,6 +266,69 @@ const Operations: React.FC = () => {
     }
   };
 
+  const addCase = async () => {
+    try {
+      await requestJson('/ops-api/cases', { method: 'POST', body: JSON.stringify(caseForm) });
+      setCaseForm(emptyCase);
+      await loadAll();
+      notify('Case created.');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Case save failed.');
+    }
+  };
+
+  const createCaseFromIncident = async (incidentId: string) => {
+    try {
+      await requestJson(`/ops-api/cases/from-incident?incident_id=${encodeURIComponent(incidentId)}`, { method: 'POST' });
+      await loadAll();
+      notify('Incident converted to case.');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Case creation failed.');
+    }
+  };
+
+  const addPolicy = async () => {
+    try {
+      await requestJson('/ops-api/storage-policies', { method: 'POST', body: JSON.stringify(policyForm) });
+      setPolicyForm(emptyPolicy);
+      await loadAll();
+      notify('Storage policy saved.');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Storage policy save failed.');
+    }
+  };
+
+  const addIntegration = async () => {
+    try {
+      await requestJson('/ops-api/integrations', { method: 'POST', body: JSON.stringify(integrationForm) });
+      setIntegrationForm(emptyIntegration);
+      await loadAll();
+      notify('Integration saved.');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Integration save failed.');
+    }
+  };
+
+  const testIntegration = async (integrationId: string) => {
+    try {
+      const data = await requestJson(`/ops-api/integrations/${integrationId}/test`, { method: 'POST' });
+      notify(data.message || 'Integration tested.');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Integration test failed.');
+    }
+  };
+
+  const addSite = async () => {
+    try {
+      await requestJson('/ops-api/sites', { method: 'POST', body: JSON.stringify(siteForm) });
+      setSiteForm(emptySite);
+      await loadAll();
+      notify('Site node saved.');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Site save failed.');
+    }
+  };
+
   const packageIncident = async (incident: any) => {
     try {
       const data = await requestJson('/ops-api/evidence-package', {
@@ -214,6 +342,7 @@ const Operations: React.FC = () => {
         }),
       });
       setEvidencePackage(data);
+      await loadAll();
       notify(`Evidence package ${data.package_id} prepared.`);
     } catch (error) {
       notify(error instanceof Error ? error.message : 'Evidence package failed.');
@@ -241,9 +370,13 @@ const Operations: React.FC = () => {
           {[
             ['health', HeartPulse, 'Health'],
             ['incidents', Activity, 'Incidents'],
+            ['cases', FileText, 'Cases'],
             ['nvrs', Network, 'NVRs'],
             ['rules', BellRing, 'Rules'],
+            ['storage', HardDrive, 'Storage'],
             ['privacy', EyeOff, 'Privacy'],
+            ['integrations', Plug, 'Integrations'],
+            ['sites', Cloud, 'Sites'],
             ['review', Shield, 'Review'],
           ].map(([id, Icon, label]) => {
             const Cmp = Icon as typeof HeartPulse;
@@ -343,7 +476,60 @@ const Operations: React.FC = () => {
                         {(incident.objects || []).map((objectName: string) => <span className="badge online" key={objectName}>{objectName}</span>)}
                       </div>
                     </div>
-                    <button className="btn btn-ghost" onClick={() => packageIncident(incident)}><FileText size={14} /> Evidence</button>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button className="btn btn-ghost" onClick={() => createCaseFromIncident(incident.id)}><Shield size={14} /> Case</button>
+                      <button className="btn btn-ghost" onClick={() => packageIncident(incident)}><FileText size={14} /> Evidence</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {tab === 'cases' && (
+            <>
+              <div style={grid4}>
+                {[
+                  ['Open', cases.filter(c => c.status === 'open').length],
+                  ['Reviewing', cases.filter(c => c.status === 'reviewing').length],
+                  ['Locked', cases.filter(c => c.locked).length],
+                  ['Evidence Packs', evidencePackages.length],
+                ].map(([label, value]) => (
+                  <div className="card" key={label as string} style={{ padding: 18 }}>
+                    <div className="card-title">{label as string}</div>
+                    <div style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--t1)', marginTop: 8 }}>{value as any}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="card">
+                <div className="card-head"><span className="card-title">Create Case</span><button className="btn btn-primary" onClick={addCase}><Save size={15} /> Save Case</button></div>
+                <div style={{ padding: 18, ...grid4 }}>
+                  <Field label="Title"><input className="form-input" value={caseForm.title} onChange={e => setCaseForm((f: any) => ({ ...f, title: e.target.value }))} /></Field>
+                  <Field label="Status"><select className="form-select" value={caseForm.status} onChange={e => setCaseForm((f: any) => ({ ...f, status: e.target.value }))}>{['open', 'reviewing', 'resolved', 'archived'].map(v => <option key={v}>{v}</option>)}</select></Field>
+                  <Field label="Severity"><select className="form-select" value={caseForm.severity} onChange={e => setCaseForm((f: any) => ({ ...f, severity: e.target.value }))}>{['low', 'medium', 'high', 'critical'].map(v => <option key={v}>{v}</option>)}</select></Field>
+                  <Field label="Assigned To"><input className="form-input" value={caseForm.assigned_to} onChange={e => setCaseForm((f: any) => ({ ...f, assigned_to: e.target.value }))} /></Field>
+                  <Field label="Notes"><input className="form-input" value={caseForm.notes} onChange={e => setCaseForm((f: any) => ({ ...f, notes: e.target.value }))} /></Field>
+                  <Field label="Evidence Lock"><select className="form-select" value={caseForm.locked ? 'yes' : 'no'} onChange={e => setCaseForm((f: any) => ({ ...f, locked: e.target.value === 'yes' }))}><option value="yes">Locked</option><option value="no">Unlocked</option></select></Field>
+                </div>
+              </div>
+              <div className="card">
+                <div className="card-head"><span className="card-title">Case Register</span></div>
+                {cases.length === 0 ? <div className="empty"><FileText size={22} /><div className="empty-title">No cases yet</div></div> : cases.map(item => (
+                  <div className="cam-row" key={item.id}>
+                    <FileText size={15} color={item.locked ? 'var(--amber)' : 'var(--cyan)'} />
+                    <div style={{ flex: 1 }}><div style={{ fontWeight: 700 }}>{item.title}</div><div style={{ color: 'var(--t3)', fontSize: '0.72rem' }}>{item.status} - {item.assigned_to || 'unassigned'} - {(item.event_ids || []).length} events</div></div>
+                    <span className={`badge ${item.severity === 'critical' ? 'recording' : item.severity === 'high' ? 'offline' : 'online'}`}>{item.severity}</span>
+                    <button className="btn btn-danger" onClick={() => deleteItem(`/ops-api/cases/${item.id}`, 'Case deleted.')}><Trash2 size={14} /></button>
+                  </div>
+                ))}
+              </div>
+              <div className="card">
+                <div className="card-head"><span className="card-title">Evidence Packages</span></div>
+                {evidencePackages.length === 0 ? <div className="empty"><DatabaseBackup size={22} /><div className="empty-title">No evidence packages yet</div></div> : evidencePackages.map(item => (
+                  <div className="cam-row" key={item.id}>
+                    <DatabaseBackup size={15} color="var(--green)" />
+                    <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 700 }}>{item.title}</div><div style={{ color: 'var(--t3)', fontSize: '0.68rem', fontFamily: 'JetBrains Mono, monospace', overflowWrap: 'anywhere' }}>{item.sha256}</div></div>
+                    <span className="badge online">{item.status}</span>
                   </div>
                 ))}
               </div>
@@ -454,6 +640,49 @@ const Operations: React.FC = () => {
             </>
           )}
 
+          {tab === 'storage' && (
+            <>
+              <div style={grid4}>
+                {[
+                  ['Recording GB', forecast?.recording_gb ?? 0],
+                  ['Files', forecast?.recording_files ?? 0],
+                  ['Policies', forecast?.active_policies ?? policies.length],
+                  ['Event Retention', `${forecast?.max_event_retention_days ?? 0} days`],
+                ].map(([label, value]) => (
+                  <div className="card" key={label as string} style={{ padding: 18 }}>
+                    <div className="card-title">{label as string}</div>
+                    <div style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--t1)', marginTop: 8 }}>{value as any}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="card">
+                <div className="card-head"><span className="card-title">Storage Policy</span><button className="btn btn-primary" onClick={addPolicy}><Save size={15} /> Save Policy</button></div>
+                <div style={{ padding: 18, ...grid4 }}>
+                  <Field label="Name"><input className="form-input" value={policyForm.name} onChange={e => setPolicyForm((f: any) => ({ ...f, name: e.target.value }))} /></Field>
+                  <Field label="Record Mode"><select className="form-select" value={policyForm.record_mode} onChange={e => setPolicyForm((f: any) => ({ ...f, record_mode: e.target.value }))}>{['continuous', 'motion', 'events_only'].map(v => <option key={v}>{v}</option>)}</select></Field>
+                  <Field label="Archive Target"><select className="form-select" value={policyForm.archive_target} onChange={e => setPolicyForm((f: any) => ({ ...f, archive_target: e.target.value }))}>{['local', 'nas', 's3', 'none'].map(v => <option key={v}>{v}</option>)}</select></Field>
+                  <Field label="Enabled"><select className="form-select" value={policyForm.enabled ? 'yes' : 'no'} onChange={e => setPolicyForm((f: any) => ({ ...f, enabled: e.target.value === 'yes' }))}><option value="yes">Enabled</option><option value="no">Disabled</option></select></Field>
+                  <Field label="Retention Days"><input className="form-input" type="number" min={1} value={policyForm.retention_days} onChange={e => setPolicyForm((f: any) => ({ ...f, retention_days: Number(e.target.value) }))} /></Field>
+                  <Field label="Event Retention"><input className="form-input" type="number" min={1} value={policyForm.event_retention_days} onChange={e => setPolicyForm((f: any) => ({ ...f, event_retention_days: Number(e.target.value) }))} /></Field>
+                  <Field label="Lock Evidence"><select className="form-select" value={policyForm.lock_evidence ? 'yes' : 'no'} onChange={e => setPolicyForm((f: any) => ({ ...f, lock_evidence: e.target.value === 'yes' }))}><option value="yes">Yes</option><option value="no">No</option></select></Field>
+                  <Field label="Cameras"><select className="form-select" multiple value={policyForm.camera_ids} onChange={e => setPolicyForm((f: any) => ({ ...f, camera_ids: Array.from(e.target.selectedOptions).map(o => o.value) }))}>{cameraOptions}</select></Field>
+                </div>
+              </div>
+              <div className="card">
+                <div className="card-head"><span className="card-title">Active Storage Policies</span></div>
+                {policies.length === 0 ? <div className="empty"><HardDrive size={22} /><div className="empty-title">No storage policies yet</div></div> : policies.map(policy => (
+                  <div className="cam-row" key={policy.id}>
+                    <HardDrive size={15} color="var(--cyan)" />
+                    <div style={{ flex: 1 }}><div style={{ fontWeight: 700 }}>{policy.name}</div><div style={{ color: 'var(--t3)', fontSize: '0.72rem' }}>{policy.record_mode} - {policy.retention_days} days - {policy.archive_target}</div></div>
+                    <span className={`badge ${policy.enabled ? 'online' : 'offline'}`}>{policy.lock_evidence ? 'evidence locked' : 'standard'}</span>
+                    <button className="btn btn-danger" onClick={() => deleteItem(`/ops-api/storage-policies/${policy.id}`, 'Storage policy deleted.')}><Trash2 size={14} /></button>
+                  </div>
+                ))}
+              </div>
+              {forecast?.recommendation && <div className="card" style={{ padding: 18, color: 'var(--t2)', fontSize: '0.82rem' }}>{forecast.recommendation}</div>}
+            </>
+          )}
+
           {tab === 'privacy' && (
             <>
               <div className="card">
@@ -475,6 +704,74 @@ const Operations: React.FC = () => {
                     <div style={{ flex: 1 }}><div style={{ fontWeight: 700 }}>{mode.name}</div><div style={{ color: 'var(--t3)', fontSize: '0.72rem' }}>{mode.mode} - {mode.schedule}</div></div>
                     <span className={`badge ${mode.enabled ? 'online' : 'offline'}`}>{mode.enabled ? 'enabled' : 'off'}</span>
                     <button className="btn btn-danger" onClick={() => deleteItem(`/ops-api/privacy-modes/${mode.id}`, 'Privacy mode deleted.')}><Trash2 size={14} /></button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {tab === 'integrations' && (
+            <>
+              <div className="card">
+                <div className="card-head"><span className="card-title">Event Integration</span><button className="btn btn-primary" onClick={addIntegration}><Save size={15} /> Save Integration</button></div>
+                <div style={{ padding: 18, ...grid4 }}>
+                  <Field label="Name"><input className="form-input" value={integrationForm.name} onChange={e => setIntegrationForm((f: any) => ({ ...f, name: e.target.value }))} /></Field>
+                  <Field label="Kind"><select className="form-select" value={integrationForm.kind} onChange={e => setIntegrationForm((f: any) => ({ ...f, kind: e.target.value }))}>{['webhook', 'mqtt', 'email', 'home_assistant', 'slack', 'teams'].map(v => <option key={v}>{v}</option>)}</select></Field>
+                  <Field label="Target"><input className="form-input" value={integrationForm.target} onChange={e => setIntegrationForm((f: any) => ({ ...f, target: e.target.value }))} placeholder="URL, topic, email, or endpoint" /></Field>
+                  <Field label="Enabled"><select className="form-select" value={integrationForm.enabled ? 'yes' : 'no'} onChange={e => setIntegrationForm((f: any) => ({ ...f, enabled: e.target.value === 'yes' }))}><option value="yes">Enabled</option><option value="no">Disabled</option></select></Field>
+                  <Field label="Events"><input className="form-input" value={integrationForm.events.join(', ')} onChange={e => setIntegrationForm((f: any) => ({ ...f, events: e.target.value.split(',').map(v => v.trim()).filter(Boolean) }))} /></Field>
+                  <Field label="Secret Ref"><input className="form-input" value={integrationForm.secret_ref} onChange={e => setIntegrationForm((f: any) => ({ ...f, secret_ref: e.target.value }))} placeholder="env:SLACK_WEBHOOK_URL" /></Field>
+                </div>
+              </div>
+              <div className="card">
+                <div className="card-head"><span className="card-title">Configured Integrations</span></div>
+                {integrations.length === 0 ? <div className="empty"><Plug size={22} /><div className="empty-title">No integrations yet</div></div> : integrations.map(item => (
+                  <div className="cam-row" key={item.id}>
+                    <Plug size={15} color="var(--pink)" />
+                    <div style={{ flex: 1 }}><div style={{ fontWeight: 700 }}>{item.name}</div><div style={{ color: 'var(--t3)', fontSize: '0.72rem' }}>{item.kind} - {(item.events || []).join(', ')}</div></div>
+                    <span className={`badge ${item.enabled ? 'online' : 'offline'}`}>{item.target ? 'target set' : 'needs target'}</span>
+                    <button className="btn btn-ghost" onClick={() => testIntegration(item.id)}>Test</button>
+                    <button className="btn btn-danger" onClick={() => deleteItem(`/ops-api/integrations/${item.id}`, 'Integration deleted.')}><Trash2 size={14} /></button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {tab === 'sites' && (
+            <>
+              <div style={grid4}>
+                {[
+                  ['Sites', sites.length],
+                  ['Recorders', sites.filter(s => s.role === 'recorder').length],
+                  ['Backups', sites.filter(s => s.role === 'backup').length],
+                  ['Enabled', sites.filter(s => s.status === 'enabled').length],
+                ].map(([label, value]) => (
+                  <div className="card" key={label as string} style={{ padding: 18 }}>
+                    <div className="card-title">{label as string}</div>
+                    <div style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--t1)', marginTop: 8 }}>{value as any}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="card">
+                <div className="card-head"><span className="card-title">Site Node</span><button className="btn btn-primary" onClick={addSite}><Save size={15} /> Save Site</button></div>
+                <div style={{ padding: 18, ...grid4 }}>
+                  <Field label="Name"><input className="form-input" value={siteForm.name} onChange={e => setSiteForm((f: any) => ({ ...f, name: e.target.value }))} /></Field>
+                  <Field label="Role"><select className="form-select" value={siteForm.role} onChange={e => setSiteForm((f: any) => ({ ...f, role: e.target.value }))}>{['recorder', 'viewer', 'relay', 'backup'].map(v => <option key={v}>{v}</option>)}</select></Field>
+                  <Field label="Endpoint"><input className="form-input" value={siteForm.endpoint} onChange={e => setSiteForm((f: any) => ({ ...f, endpoint: e.target.value }))} placeholder="https://site.example.com" /></Field>
+                  <Field label="Enabled"><select className="form-select" value={siteForm.enabled ? 'yes' : 'no'} onChange={e => setSiteForm((f: any) => ({ ...f, enabled: e.target.value === 'yes' }))}><option value="yes">Enabled</option><option value="no">Disabled</option></select></Field>
+                  <Field label="Location"><input className="form-input" value={siteForm.location} onChange={e => setSiteForm((f: any) => ({ ...f, location: e.target.value }))} /></Field>
+                  <Field label="Notes"><input className="form-input" value={siteForm.notes} onChange={e => setSiteForm((f: any) => ({ ...f, notes: e.target.value }))} /></Field>
+                </div>
+              </div>
+              <div className="card">
+                <div className="card-head"><span className="card-title">Site Registry</span></div>
+                {sites.length === 0 ? <div className="empty"><Cloud size={22} /><div className="empty-title">No site nodes configured</div></div> : sites.map(site => (
+                  <div className="cam-row" key={site.id}>
+                    <Cloud size={15} color="var(--cyan)" />
+                    <div style={{ flex: 1 }}><div style={{ fontWeight: 700 }}>{site.name}</div><div style={{ color: 'var(--t3)', fontSize: '0.72rem' }}>{site.role} - {site.location || site.endpoint || 'local'}</div></div>
+                    <span className={`badge ${site.status === 'enabled' ? 'online' : 'offline'}`}>{site.status}</span>
+                    <button className="btn btn-danger" onClick={() => deleteItem(`/ops-api/sites/${site.id}`, 'Site deleted.')}><Trash2 size={14} /></button>
                   </div>
                 ))}
               </div>
