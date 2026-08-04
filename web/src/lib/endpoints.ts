@@ -6,6 +6,9 @@ const joinUrl = (base: string, path: string) => {
 };
 
 export const apiBase = () => {
+  const override = localStorage.getItem('mview_api_base');
+  if (override) return override;
+
   if (window.location.port === '5173') {
     return `http://${window.location.hostname}:8000`;
   }
