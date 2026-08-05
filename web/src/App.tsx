@@ -146,7 +146,7 @@ const Sidebar = ({ onLogout, onToggleAI, showAIActive }: { onLogout: () => void;
             key={item.to}
             to={item.to}
             end={item.end}
-            className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+            className={({ isActive }: { isActive: boolean }) => `nav-item${isActive ? ' active' : ''}`}
           >
             {item.icon}
             {item.label}
