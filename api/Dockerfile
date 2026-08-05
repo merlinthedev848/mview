@@ -1,3 +1,12 @@
+# ── Stage 1: Build the frontend ──────────────────────────────────────
+FROM node:20-alpine AS frontend-builder
+WORKDIR /web
+COPY web/package*.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build
+
+# ── Stage 2: Final API container ─────────────────────────────────────
 FROM python:3.13-slim-bookworm
 WORKDIR /app
 
@@ -15,6 +24,7 @@ COPY api/requirements.txt ./api/
 RUN pip install uv && uv pip install --system --no-cache -r api/requirements.txt
 
 COPY api /app/api
-COPY web/dist /app/web/dist
+# Copy the compiled assets from Stage 1
+COPY --from=frontend-builder /web/dist /app/web/dist
 
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
