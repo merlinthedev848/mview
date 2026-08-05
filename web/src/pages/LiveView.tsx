@@ -11,9 +11,11 @@ import {
   WifiOff,
   Volume2,
   VolumeX,
+  Crosshair,
 } from 'lucide-react';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { apiUrl, go2rtcUrl } from '../lib/endpoints';
+import PTZControls from '../components/PTZControls';
 
 interface Camera {
   id: string;
@@ -24,6 +26,7 @@ interface Camera {
   resolution?: string;
   location?: string;
   has_motion?: boolean;
+  onvif_endpoint?: string;
 }
 
 interface CameraEvent {
@@ -85,6 +88,7 @@ const CameraFeedComponent: React.FC<{
   const containerRef = useRef<HTMLDivElement>(null);
   const [connected, setConnected] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
+  const [showPTZ, setShowPTZ] = useState(false);
   const streamName = maximized ? `${cam.id}_main` : cam.rtsp_url_sub ? `${cam.id}_sub` : cam.id;
 
   // Tools states
@@ -369,7 +373,23 @@ const CameraFeedComponent: React.FC<{
         </div>
       )}
 
+      {showPTZ && cam.onvif_endpoint && (
+        <div style={{ position: 'absolute', right: '12px', top: '50px', zIndex: 15 }}>
+          <PTZControls cameraId={cam.id} />
+        </div>
+      )}
+
       <div className="cam-bottom" style={{ zIndex: 10 }}>
+        {cam.onvif_endpoint && (
+          <button 
+            className="cam-btn" 
+            title="PTZ Controls" 
+            onClick={() => setShowPTZ(!showPTZ)}
+            style={{ color: showPTZ ? 'var(--cyan)' : 'inherit' }}
+          >
+            <Crosshair size={12} />
+          </button>
+        )}
         {/* Focus Mode (Digital Zoom) */}
         <button 
           className="cam-btn" 

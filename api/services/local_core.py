@@ -184,6 +184,7 @@ def _camera_payload(camera: Camera) -> dict[str, Any]:
         "manufacturer": camera.manufacturer,
         "model": camera.model,
         "resolution": camera.resolution,
+        "onvif_endpoint": camera.onvif_endpoint,
     }
 
 

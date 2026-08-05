@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 from aiomqtt import Client as MQTTClient
 from api.database import async_session_maker
 from api.models.ai import SemanticEvent
@@ -10,6 +11,31 @@ from api.services.local_core import local_core
 from datetime import datetime
 
 logger = logging.getLogger("mView-EventProcessor")
+
+async def capture_snapshot(rtsp_url: str) -> bytes | None:
+    cmd = [
+        "ffmpeg",
+        "-loglevel", "error",
+        "-rtsp_transport", "tcp",
+        "-i", rtsp_url,
+        "-frames:v", "1",
+        "-q:v", "4",
+        "-f", "image2pipe",
+        "-vcodec", "mjpeg",
+        "-",
+    ]
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=8.0)
+        if proc.returncode == 0 and stdout:
+            return stdout
+    except Exception:
+        pass
+    return None
 
 MQTT_BROKER = settings.mqtt_broker
 MQTT_PORT = settings.mqtt_port
@@ -121,6 +147,19 @@ async def process_mqtt_events():
                             if camera and isinstance(camera.config, dict):
                                 zones = camera.config.get("zones") or []
 
+                            # VLM Scene Interpretation
+                            vlm_result = None
+                            rtsp_url = camera.rtsp_url_sub or camera.rtsp_url_main
+                            if rtsp_url and objects:
+                                detected_classes = [obj.get("class", "object") for obj in objects]
+                                try:
+                                    snapshot_bytes = await capture_snapshot(rtsp_url)
+                                    if snapshot_bytes:
+                                        from api.services.vlm_service import vlm_service
+                                        vlm_result = await vlm_service.analyze_frame(snapshot_bytes, detected_classes)
+                                except Exception as err:
+                                    logger.error(f"VLM snapshot analysis failed: {err}")
+
                             saved_count = 0
                             for obj in objects:
                                 zone = _matching_zone(obj, zones, frame)
@@ -132,8 +171,11 @@ async def process_mqtt_events():
                                     continue
 
                                 object_class = obj.get("class")
-                                if zone.get("name"):
+                                if vlm_result and vlm_result.get("description"):
+                                    object_class = f"{object_class}: {vlm_result['description']}"
+                                elif zone.get("name"):
                                     object_class = f"{object_class} @ {zone.get('name')}"
+                                    
                                 if zone.get("id"):
                                     cooldown = float(zone.get("cooldown_seconds") or 0)
                                     cooldown_key = (str(camera_id), str(zone.get("id")), str(obj.get("class") or "object"))
@@ -151,6 +193,37 @@ async def process_mqtt_events():
                                     timestamp=timestamp,
                                 ))
                                 saved_count += 1
+                                
+                                # Send push notifications dynamically if threat level is MEDIUM or HIGH
+                                if vlm_result and vlm_result.get("threat_level") in ("MEDIUM", "HIGH"):
+                                    try:
+                                        from api.services.notification_service import notification_service
+                                        event_data = {
+                                            "camera_id": camera_id,
+                                            "object_class": object_class,
+                                            "confidence": obj.get("confidence"),
+                                            "timestamp": timestamp.isoformat(),
+                                            "threat_level": vlm_result.get("threat_level")
+                                        }
+                                        default_webhook = os.getenv("DEFAULT_DISCORD_WEBHOOK")
+                                        default_bot_token = os.getenv("DEFAULT_TELEGRAM_BOT_TOKEN")
+                                        default_chat_id = os.getenv("DEFAULT_TELEGRAM_CHAT_ID")
+                                        
+                                        rule = {
+                                            "channels": [],
+                                            "webhook_url": default_webhook,
+                                            "bot_token": default_bot_token,
+                                            "chat_id": default_chat_id
+                                        }
+                                        if default_webhook:
+                                            rule["channels"].append("discord")
+                                        if default_bot_token and default_chat_id:
+                                            rule["channels"].append("telegram")
+                                            
+                                        if rule["channels"]:
+                                            asyncio.create_task(notification_service.dispatch(rule, event_data))
+                                    except Exception as alert_err:
+                                        logger.error(f"Failed to dispatch smart alert: {alert_err}")
                                     
                             await session.commit()
                             if saved_count:

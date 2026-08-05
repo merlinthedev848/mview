@@ -1,15 +1,15 @@
 import React, { Suspense, lazy, useState, useEffect } from 'react';
-import { Video, PlaySquare, Bell, Settings as SettingsIcon, ShieldCheck, HardDrive, LogOut, Wifi, LayoutDashboard, Map as MapIcon, Activity } from 'lucide-react';
+import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
+import { Video, PlaySquare, Bell, Settings as SettingsIcon, ShieldCheck, HardDrive, LogOut, Wifi, LayoutDashboard, Map, Bot, Send, X } from 'lucide-react';
 
 import Login     from './pages/Login';
 import { apiUrl } from './lib/endpoints';
 
-const Dashboard = lazy(() => import('./pages/Dashboard'));
 const LiveView = lazy(() => import('./pages/LiveView'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const MapView = lazy(() => import('./pages/MapView'));
 const Playback = lazy(() => import('./pages/Playback'));
 const Events = lazy(() => import('./pages/Events'));
-const MapView = lazy(() => import('./pages/MapView'));
-const Operations = lazy(() => import('./pages/Operations'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Wallboard = lazy(() => import('./pages/Wallboard'));
 
@@ -38,32 +38,7 @@ window.fetch = async (...args) => {
   return res;
 };
 
-type NavItem = {
-  to: string;
-  label: string;
-  icon: React.ReactNode;
-  end: boolean;
-  badge?: number;
-};
-
-const normalizePath = (path: string) => {
-  const normalized = path.replace(/\/+$/, '');
-  return normalized || '/';
-};
-
-const navigateTo = (path: string) => {
-  if (normalizePath(window.location.pathname) === normalizePath(path)) return;
-  window.history.pushState({}, '', path);
-  window.dispatchEvent(new PopStateEvent('popstate'));
-};
-
-const isActivePath = (currentPath: string, item: NavItem) => {
-  const current = normalizePath(currentPath);
-  const target = normalizePath(item.to);
-  return item.end ? current === target : current === target || current.startsWith(`${target}/`);
-};
-
-const Sidebar = ({ onLogout, currentPath }: { onLogout: () => void; currentPath: string }) => {
+const Sidebar = ({ onLogout, onToggleAI, showAIActive }: { onLogout: () => void; onToggleAI: () => void; showAIActive: boolean }) => {
   const [cameras, setCameras] = useState<any[]>([]);
   const [events,  setEvents]  = useState<any[]>([]);
   const [storage, setStorage] = useState<any>(null);
@@ -140,14 +115,13 @@ const Sidebar = ({ onLogout, currentPath }: { onLogout: () => void; currentPath:
   const onlineCams = cameras.filter(c => c.status !== 'offline').length;
   const unreadEvents = events.length;
 
-  const navItems: NavItem[] = [
-    { to: '/',         label: 'Dashboard',  icon: <LayoutDashboard size={16} />, end: true  },
-    { to: '/live',     label: 'Live View',  icon: <Video           size={16} />, end: false },
-    { to: '/playback', label: 'Playback',   icon: <PlaySquare      size={16} />, end: false },
-    { to: '/events',   label: 'Events',     icon: <Bell            size={16} />, end: false, badge: unreadEvents || undefined },
-    { to: '/map',      label: 'Map',        icon: <MapIcon         size={16} />, end: false },
-    { to: '/operations', label: 'Operations', icon: <Activity      size={16} />, end: false },
-    { to: '/settings', label: 'Settings',   icon: <SettingsIcon    size={16} />, end: false },
+  const navItems = [
+    { to: '/dashboard', label: 'Dashboard',   icon: <LayoutDashboard size={16} />, end: false },
+    { to: '/',          label: 'Live View',   icon: <Video           size={16} />, end: true  },
+    { to: '/map',       label: 'Spatial Map', icon: <Map             size={16} />, end: false },
+    { to: '/playback',  label: 'Playback',    icon: <PlaySquare      size={16} />, end: false },
+    { to: '/events',    label: 'Events',      icon: <Bell            size={16} />, end: false, badge: unreadEvents || undefined },
+    { to: '/settings',  label: 'Settings',    icon: <SettingsIcon    size={16} />, end: false },
   ];
 
   return (
@@ -168,20 +142,26 @@ const Sidebar = ({ onLogout, currentPath }: { onLogout: () => void; currentPath:
         <div className="nav-section">Navigation</div>
 
         {navItems.map(item => (
-          <a
+          <NavLink
             key={item.to}
-            href={item.to}
-            className={`nav-item${isActivePath(currentPath, item) ? ' active' : ''}`}
-            onClick={(event) => {
-              event.preventDefault();
-              navigateTo(item.to);
-            }}
+            to={item.to}
+            end={item.end}
+            className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
           >
             {item.icon}
             {item.label}
             {item.badge ? <span className="nav-badge">{item.badge > 99 ? '99+' : item.badge}</span> : null}
-          </a>
+          </NavLink>
         ))}
+
+        <button 
+          className={`nav-item${showAIActive ? ' active' : ''}`} 
+          onClick={onToggleAI}
+          style={{ border: 'none', background: 'transparent', textAlign: 'left', width: '100%', cursor: 'pointer', outline: 'none', display: 'flex', alignItems: 'center', gap: 10 }}
+        >
+          <Bot size={16} style={{ color: 'var(--pink)' }} />
+          AI Operator
+        </button>
 
         <div className="nav-section">System</div>
 
@@ -238,23 +218,142 @@ const Sidebar = ({ onLogout, currentPath }: { onLogout: () => void; currentPath:
   );
 };
 
+const AIOperatorDrawer: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+  const [message, setMessage] = useState('');
+  const [history, setHistory] = useState<{ role: 'user' | 'model'; content: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [history, loading]);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!message.trim() || loading) return;
+
+    const userMsg = message;
+    setMessage('');
+    setHistory(prev => [...prev, { role: 'user', content: userMsg }]);
+    setLoading(true);
+
+    try {
+      const res = await fetch(apiUrl('/agent/chat'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: userMsg,
+          history: history.map(h => ({ role: h.role, content: h.content }))
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHistory(prev => [...prev, { role: 'model', content: data.response || "No response received." }]);
+      } else {
+        setHistory(prev => [...prev, { role: 'model', content: "Failed to communicate with AI operator." }]);
+      }
+    } catch {
+      setHistory(prev => [...prev, { role: 'model', content: "Network error occurred." }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="ai-drawer" style={{
+      position: 'fixed',
+      top: 0,
+      right: 0,
+      bottom: 0,
+      width: '360px',
+      background: 'rgba(13, 21, 32, 0.96)',
+      borderLeft: '1px solid var(--border)',
+      boxShadow: '-4px 0 24px rgba(0,0,0,0.5)',
+      zIndex: 100,
+      display: 'flex',
+      flexDirection: 'column',
+      backdropFilter: 'blur(12px)',
+      animation: 'slideIn 0.3s ease'
+    }}>
+      <style>{`
+        @keyframes slideIn {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+      `}</style>
+      <div className="card-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Bot size={18} color="var(--pink)" />
+          <span className="card-title" style={{ fontSize: '0.9rem' }}>Sentinel AI Operator</span>
+        </div>
+        <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--t3)', cursor: 'pointer' }}>
+          <X size={16} />
+        </button>
+      </div>
+
+      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {history.length === 0 && (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--t3)', textAlign: 'center', padding: 20 }}>
+            <Bot size={36} color="var(--t3)" strokeWidth={1} style={{ marginBottom: 12 }} />
+            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--t2)', marginBottom: 4 }}>System Agent Active</div>
+            <div style={{ fontSize: '0.72rem', lineHeight: 1.4 }}>Ask me to check system health, list cameras, rename devices, or adjust video retention.</div>
+          </div>
+        )}
+        {history.map((msg, i) => (
+          <div key={i} style={{
+            alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+            maxWidth: '85%',
+            background: msg.role === 'user' ? 'var(--cyan-dim)' : 'var(--card-bg)',
+            color: msg.role === 'user' ? 'var(--cyan)' : 'var(--t1)',
+            padding: '10px 14px',
+            borderRadius: '12px',
+            fontSize: '0.78rem',
+            lineHeight: 1.4,
+            border: '1px solid ' + (msg.role === 'user' ? 'var(--cyan-dim)' : 'var(--border)'),
+            whiteSpace: 'pre-wrap'
+          }}>
+            {msg.content}
+          </div>
+        ))}
+        {loading && (
+          <div style={{ alignSelf: 'flex-start', background: 'var(--card-bg)', padding: '10px 14px', borderRadius: '12px', display: 'flex', gap: 4, alignItems: 'center', border: '1px solid var(--border)' }}>
+            <div className="spinner" style={{ width: 12, height: 12 }} />
+            <span style={{ fontSize: '0.72rem', color: 'var(--t3)' }}>Operator thinking...</span>
+          </div>
+        )}
+      </div>
+
+      <form onSubmit={handleSubmit} style={{ padding: 15, borderTop: '1px solid var(--border)', display: 'flex', gap: 8 }}>
+        <input
+          className="form-input"
+          type="text"
+          value={message}
+          onChange={e => setMessage(e.target.value)}
+          placeholder="Command the NVR..."
+          style={{ flex: 1, fontSize: '0.78rem' }}
+          disabled={loading}
+        />
+        <button className="btn btn-primary" type="submit" style={{ padding: '8px 12px' }} disabled={loading}>
+          <Send size={14} />
+        </button>
+      </form>
+    </div>
+  );
+};
+
 function App() {
   const [token, setToken] = useState(localStorage.getItem('mview_token'));
-  const [currentPath, setCurrentPath] = useState(normalizePath(window.location.pathname));
 
   useEffect(() => {
     const handleStorage = () => {
       setToken(localStorage.getItem('mview_token'));
     };
-    const handleRoute = () => {
-      setCurrentPath(normalizePath(window.location.pathname));
-    };
     window.addEventListener('storage', handleStorage);
-    window.addEventListener('popstate', handleRoute);
-    return () => {
-      window.removeEventListener('storage', handleStorage);
-      window.removeEventListener('popstate', handleRoute);
-    };
+    return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
   const handleLogin = (t: string) => {
@@ -273,31 +372,35 @@ function App() {
 
   if (window.location.pathname === '/wallboard') {
     return (
-      <Suspense fallback={<div className="empty">Loading...</div>}>
-        <Wallboard />
-      </Suspense>
+      <Router>
+        <Suspense fallback={<div className="empty">Loading...</div>}>
+          <Wallboard />
+        </Suspense>
+      </Router>
     );
   }
 
-  const routes: Record<string, React.ReactNode> = {
-    '/': <Dashboard />,
-    '/live': <LiveView />,
-    '/playback': <Playback />,
-    '/events': <Events />,
-    '/map': <MapView />,
-    '/operations': <Operations />,
-    '/settings': <Settings />,
-  };
+  const [showAIDrawer, setShowAIDrawer] = useState(false);
 
   return (
-    <div className="app-shell">
-      <Sidebar onLogout={handleLogout} currentPath={currentPath} />
-      <div className="main-content">
-        <Suspense fallback={<div className="empty">Loading...</div>}>
-          {routes[currentPath] ?? <Dashboard />}
-        </Suspense>
+    <Router>
+      <div className="app-shell">
+        <Sidebar onLogout={handleLogout} onToggleAI={() => setShowAIDrawer(!showAIDrawer)} showAIActive={showAIDrawer} />
+        <div className="main-content">
+          <Suspense fallback={<div className="empty">Loading...</div>}>
+            <Routes>
+              <Route path="/"         element={<LiveView />}  />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/map"      element={<MapView />}   />
+              <Route path="/playback" element={<Playback />}  />
+              <Route path="/events"   element={<Events />}    />
+              <Route path="/settings" element={<Settings />}  />
+            </Routes>
+          </Suspense>
+        </div>
+        <AIOperatorDrawer isOpen={showAIDrawer} onClose={() => setShowAIDrawer(false)} />
       </div>
-    </div>
+    </Router>
   );
 }
 

@@ -167,6 +167,20 @@ class Settings(BaseSettings):
     # ── CORS ────────────────────────────────────────────────────────────
     cors_origins: list[str] = ["*"]
 
+    # ── AI Active Operator Settings ─────────────────────────────────────
+    ai_provider: str = Field(
+        default="local",
+        validation_alias=AliasChoices("SENTINEL_AI_PROVIDER", "AI_PROVIDER"),
+    )
+    gemini_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("SENTINEL_GEMINI_API_KEY", "GEMINI_API_KEY"),
+    )
+    openai_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("SENTINEL_OPENAI_API_KEY", "OPENAI_API_KEY"),
+    )
+
     # ── Camera YAML config (loaded from sentinel.yml) ───────────────────
     cameras_config: list[dict[str, Any]] = Field(default_factory=list)
 

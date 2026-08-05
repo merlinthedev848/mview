@@ -180,7 +180,10 @@ class ONVIFService:
             from onvif import ONVIFCamera
             import os
             wsdl_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'wsdl')
-            mycam = ONVIFCamera(ip, port, username, password, wsdl_dir=wsdl_dir)
+            if os.path.exists(wsdl_dir):
+                mycam = ONVIFCamera(ip, port, username, password, wsdl_dir=wsdl_dir)
+            else:
+                mycam = ONVIFCamera(ip, port, username, password)
             media = mycam.create_media_service()
             profiles = media.GetProfiles()
             streams = []
@@ -249,7 +252,10 @@ class ONVIFService:
             raise ValueError("Invalid ONVIF endpoint")
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
         wsdl_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'wsdl')
-        return ONVIFCamera(parsed.hostname, port, username, password, wsdl_dir=wsdl_dir)
+        if os.path.exists(wsdl_dir):
+            return ONVIFCamera(parsed.hostname, port, username, password, wsdl_dir=wsdl_dir)
+        else:
+            return ONVIFCamera(parsed.hostname, port, username, password)
 
     @staticmethod
     def _ptz_velocity(action: str, speed: float) -> tuple[float, float, float]:
