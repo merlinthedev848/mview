@@ -70,6 +70,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
       if (pc) {
         if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
           window.clearTimeout(rtcTimeout);
+          videoRef.current?.play().catch(e => console.log("Play on connection success error:", e));
         }
         if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
           console.warn("WebRTC connection failed/disconnected. Falling back to HLS...");
@@ -82,6 +83,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
       window.clearTimeout(rtcTimeout);
       if (videoRef.current && videoRef.current.srcObject !== event.streams[0]) {
         videoRef.current.srcObject = event.streams[0];
+        videoRef.current.play().catch(e => console.log("WebRTC play error:", e));
         setIsStreaming(true);
       }
     };

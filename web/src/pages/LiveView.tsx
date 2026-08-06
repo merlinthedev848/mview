@@ -145,6 +145,7 @@ const CameraFeedComponent: React.FC<{
         if (pc.connectionState === 'connected') {
           window.clearTimeout(rtcTimeout);
           setConnected(true);
+          videoRef.current?.play().catch(err => console.log("LiveView play on connection success error:", err));
         }
         if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
           console.warn('[LiveView WebRTC] connection failed/disconnected. Falling back to HLS...');
@@ -157,6 +158,7 @@ const CameraFeedComponent: React.FC<{
       window.clearTimeout(rtcTimeout);
       if (videoRef.current && videoRef.current.srcObject !== e.streams[0]) {
         videoRef.current.srcObject = e.streams[0];
+        videoRef.current.play().catch(err => console.log("LiveView WebRTC play error:", err));
         setConnected(true);
       }
     };
