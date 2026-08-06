@@ -466,10 +466,10 @@ async def factory_reset(
     except Exception as e:
         print(f"Error purging recordings during factory reset: {e}")
 
-    # 3. Wipe all tables except users. Use TRUNCATE on Postgres and portable deletes elsewhere.
+    # 3. Wipe all tables except users. Use TRUNCATE on Postgres and portable deletes otherwise.
+    from api.database import engine as _engine
     try:
-        bind = db.get_bind()
-        if bind and bind.dialect.name == "postgresql":
+        if _engine.dialect.name == "postgresql":
             await db.execute(text("TRUNCATE TABLE event_reviews, privacy_modes, alert_rules, nvr_connections, semantic_events, faces, cameras CASCADE;"))
         else:
             await db.execute(delete(EventReview))

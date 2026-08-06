@@ -166,14 +166,15 @@ async def process_mqtt_events():
                                 if zone is None:
                                     continue
 
+                                # Only store embedding if it's the expected 512-dim vector
                                 embedding = obj.get("embedding")
-                                if not embedding or len(embedding) != 512:
-                                    continue
+                                if not isinstance(embedding, list) or len(embedding) != 512:
+                                    embedding = None
 
-                                object_class = obj.get("class")
+                                object_class = obj.get("class") or "unknown"
                                 if vlm_result and vlm_result.get("description"):
                                     object_class = f"{object_class}: {vlm_result['description']}"
-                                elif zone.get("name"):
+                                elif zone and zone.get("name"):
                                     object_class = f"{object_class} @ {zone.get('name')}"
                                     
                                 if zone.get("id"):

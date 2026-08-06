@@ -44,6 +44,7 @@ async def auto_update_worker():
     """Periodically check the Sentinel update manifest and start an update when enabled."""
     log.info("Starting auto-update background loop...")
     while True:
+        sleep_seconds = 3600  # default fallback interval
         try:
             from api.routers.system import _build_update_status, _compose_config, _install_dir, _read_config_file, _start_update_process
             config = _compose_config(_read_config_file())
@@ -137,7 +138,7 @@ app = FastAPI(title="mView Sentinel", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("FRONTEND_URL", "http://localhost:5173,http://127.0.0.1:5173").split(","),
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -172,6 +173,11 @@ async def auth_middleware(request: Request, call_next):
         if path.startswith(prefix):
             required = permissions
             break
+
+    # Allow users to change their own password without needing 'settings' permission
+    import re as _re
+    if request.method == "PATCH" and _re.match(r'^/users/[^/]+/password$', path):
+        required = None  # just needs a valid JWT — enforced inside the route handler
 
     if required and not path.startswith("/system/health"):
         auth_header = request.headers.get("Authorization")

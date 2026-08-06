@@ -32,9 +32,12 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /opt/mview-sentinel:/opt/mview-sentinel
     depends_on:
-      - postgres
-      - redis
-      - mqtt
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mqtt:
+        condition: service_started
     restart: unless-stopped
 
   detector:
@@ -76,6 +79,12 @@ services:
     ports:
       - "5432:5432"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinelnvr"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   redis:
     image: redis:8.2-alpine
@@ -87,6 +96,11 @@ services:
     ports:
       - "6379:6379"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   mqtt:
     image: eclipse-mosquitto:2.1.2-alpine

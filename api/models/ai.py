@@ -31,8 +31,8 @@ class SemanticEvent(Base):
     camera_id = Column(String, ForeignKey("cameras.id", ondelete="CASCADE"), nullable=False, index=True)
     camera = relationship("Camera")
     
-    # 512-Dimensional vector from CLIP
-    embedding = Column(Vector(512), nullable=False)
+    # 512-Dimensional vector from CLIP (optional — not all detectors produce this)
+    embedding = Column(Vector(512), nullable=True)
     
     object_class = Column(String, nullable=True) # e.g., "person", "car"
     confidence = Column(Float, nullable=True)
