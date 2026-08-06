@@ -359,11 +359,13 @@ function App() {
   const handleLogin = (t: string) => {
     localStorage.setItem('mview_token', t);
     setToken(t);
+    window.location.href = '/dashboard';
   };
 
   const handleLogout = () => {
     localStorage.removeItem('mview_token');
     setToken(null);
+    window.location.href = '/';
   };
 
   if (!token) {
