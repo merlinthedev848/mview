@@ -1506,7 +1506,7 @@ const Settings: React.FC = () => {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, color: 'var(--text-2)', fontSize: '0.85rem' }}>
                     {[
                       ['Platform', 'mView Sentinel NVR'],
-                      ['Version', 'v1.0.0-beta.4'],
+                      ['Version', 'v1.0.0-beta.5-auth-fix'],
                       ['Architecture', 'x86_64 / Docker'],
                       ['Database', 'PostgreSQL 15 (Vector-enabled)'],
                       ['Uptime', '14 days, 3 hours'],
@@ -1626,7 +1626,12 @@ const Settings: React.FC = () => {
                   <div style={{ fontSize: '0.85rem', color: 'var(--text-2)', marginBottom: 16 }}>
                     Factory resetting will stop all camera recorders, wipe all recording files from storage, remove all cameras from the configuration, and clear system logs. The NVR will be reset to default settings. <strong>This action cannot be undone.</strong>
                   </div>
-                  <button className="btn btn-danger" onClick={() => setShowFactoryResetConfirm(true)} disabled={factoryResetting}>
+                  <button 
+                    className="btn btn-danger" 
+                    onClick={() => setShowFactoryResetConfirm(true)} 
+                    disabled={factoryResetting}
+                    style={{ background: 'var(--red)', color: '#000', fontWeight: 'bold', padding: '10px 20px', border: 'none', display: 'inline-flex', marginTop: 12 }}
+                  >
                     {factoryResetting ? 'Factory Resetting...' : 'Factory Reset NVR'}
                   </button>
                 </div>
