@@ -212,7 +212,11 @@ const getCurrentUser = (): TokenUser => {
   if (!token) return {};
   try {
     const payload = token.split('.')[1];
-    const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    let base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) {
+      base64 += '=';
+    }
+    const decoded = JSON.parse(atob(base64));
     return {
       id: decoded.user_id,
       username: decoded.sub,
@@ -226,7 +230,6 @@ const getCurrentUser = (): TokenUser => {
 
 type Tab = 'cameras' | 'ai' | 'network' | 'system' | 'users';
 const permissionOptions = ['live', 'playback', 'events', 'operations', 'settings'];
-
 const Settings: React.FC = () => {
   const [tab, setTab] = useState<Tab>('cameras');
   const [cameras, setCameras] = useState<Camera[]>([]);
