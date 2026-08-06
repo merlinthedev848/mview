@@ -171,11 +171,12 @@ class CameraRecorder:
 
 async def register_go2rtc_stream(name: str, rtsp_url: str):
     import httpx
+    url = settings.go2rtc_url.rstrip('/')
     for attempt in range(1, 6):
         try:
             async with httpx.AsyncClient() as client:
                 res = await client.put(
-                    "http://127.0.0.1:1984/api/streams",
+                    f"{url}/api/streams",
                     params={"name": name, "src": rtsp_url},
                     timeout=2.0
                 )
@@ -185,23 +186,30 @@ async def register_go2rtc_stream(name: str, rtsp_url: str):
                 else:
                     logger.warning(f"Failed to register stream {name} in go2rtc: {res.status_code} {res.text} (attempt {attempt})")
         except Exception as e:
-            if attempt == 5:
-                logger.warning(f"Could not connect to go2rtc API to register stream (attempt {attempt}/5): {e}")
+            logger.warning(f"Could not connect to go2rtc API at {url} (attempt {attempt}/5): {e}")
+            if "127.0.0.1" not in url:
+                url = "http://127.0.0.1:1984"
         if attempt < 5:
             await asyncio.sleep(2.0)
 
 
 async def delete_go2rtc_stream(name: str):
     import httpx
+    url = settings.go2rtc_url.rstrip('/')
     try:
         async with httpx.AsyncClient() as client:
-            res = await client.delete("http://127.0.0.1:1984/api/streams", params={"name": name})
+            res = await client.delete(f"{url}/api/streams", params={"name": name})
             if res.status_code == 200:
                 logger.info(f"Successfully deleted stream {name} from go2rtc")
             else:
                 logger.warning(f"Failed to delete stream {name} from go2rtc: {res.status_code} {res.text}")
     except Exception as e:
-        logger.warning(f"Could not connect to go2rtc API to delete stream: {e}")
+        logger.warning(f"Could not connect to go2rtc API at {url} to delete stream: {e}")
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.delete("http://127.0.0.1:1984/api/streams", params={"name": name})
+        except Exception:
+            pass
 
 
 class RecorderManager:
