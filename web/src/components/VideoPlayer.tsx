@@ -131,6 +131,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
         pc.close();
       }
       if (videoRef.current) {
+        if (videoRef.current.srcObject) {
+          try {
+            const stream = videoRef.current.srcObject;
+            if (stream instanceof MediaStream) {
+              stream.getTracks().forEach(track => track.stop());
+            }
+          } catch (e) {}
+          videoRef.current.srcObject = null;
+        }
         videoRef.current.src = '';
       }
     };

@@ -193,6 +193,18 @@ const CameraFeedComponent: React.FC<{
     return () => {
       window.clearTimeout(rtcTimeout);
       if (pc) pc.close();
+      if (videoRef.current) {
+        if (videoRef.current.srcObject) {
+          try {
+            const stream = videoRef.current.srcObject;
+            if (stream instanceof MediaStream) {
+              stream.getTracks().forEach(track => track.stop());
+            }
+          } catch (e) {}
+          videoRef.current.srcObject = null;
+        }
+        videoRef.current.src = '';
+      }
       setConnected(false);
     };
   }, [cam.id, cam.name, cam.status, cam.rtsp_url_main, streamName, isMicActive, retryNonce, iceServersKey]);
