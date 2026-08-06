@@ -85,6 +85,7 @@ const CameraFeedComponent: React.FC<{
   onMaximize?: () => void;
 }> = ({ cam, iceServers, analytics = false, maximized = false, paused = false, onMaximize }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [useMjpegFallback, setUseMjpegFallback] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [connected, setConnected] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
