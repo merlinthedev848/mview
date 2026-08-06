@@ -183,10 +183,10 @@ const CameraFeedComponent: React.FC<{
     // Set a 2.5s connection timeout for WebRTC before failing over to HLS
     rtcTimeout = window.setTimeout(() => {
       if (pc && pc.connectionState !== 'connected') {
-        console.warn(`[LiveView WebRTC] connection timed out after 2.5s for ${cam.name}. Falling back to HLS...`);
+        console.warn(`[LiveView WebRTC] connection timed out after 6.0s for ${cam.name}. Falling back to HLS...`);
         fallbackToHls();
       }
-    }, 2500);
+    }, 6000);
 
     return () => {
       window.clearTimeout(rtcTimeout);
