@@ -328,7 +328,10 @@ async def serve_spa(request: Request, full_path: str):
 
     # Serve index.html for all SPA routes
     if INDEX.exists():
-        return FileResponse(str(INDEX))
+        return FileResponse(
+            str(INDEX),
+            headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"}
+        )
 
     # Graceful fallback if the frontend was never built
     return HTMLResponse(FALLBACK_HTML, status_code=200)
