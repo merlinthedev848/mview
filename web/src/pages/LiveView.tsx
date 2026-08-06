@@ -606,12 +606,7 @@ const LiveView: React.FC = () => {
         </div>
       </div>
 
-      {cameras.length === 0 ? (
-        <div className="empty" style={{ flex: 1 }}>
-          <div className="empty-title">No Cameras Added</div>
-          <div className="empty-sub">Go to Settings to add cameras manually or auto-discover ONVIF devices.</div>
-        </div>
-      ) : viewMode === 'playback' ? (
+      {viewMode === 'playback' ? (
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 12, padding: 14 }}>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <input className="form-input" type="date" value={syncDate} onChange={e => setSyncDate(e.target.value)} style={{ width: 150 }} />
@@ -627,49 +622,63 @@ const LiveView: React.FC = () => {
             />
             <span style={{ fontFamily: 'JetBrains Mono, monospace', color: 'var(--t2)' }}>{new Date(syncTargetMs).toLocaleString()}</span>
           </div>
-          <div className={`cam-grid ${gridClass}`} style={{ flex: 1, minHeight: 0 }}>
-            {visibleCameras.map(cam => {
-              const rec = findRecording(cam.id, syncTargetMs);
-              return (
-                <div className="cam-cell" key={cam.id}>
-                  <div className="cam-top"><div className="cam-name">{cam.name}</div><div className="cam-rec"><div className="cam-rec-dot" /> SYNC</div></div>
-                  {rec ? (
-                    <video
-                      ref={el => { syncVideoRefs.current[cam.id] = el; }}
-                      key={rec.url}
-                      src={recordingSrc(rec.url)}
-                      autoPlay={!syncPaused}
-                      muted
-                      playsInline
-                      onLoadedMetadata={e => {
-                        const video = e.currentTarget;
-                        const offset = Math.max(0, (syncTargetMs - rec.startTimestamp) / 1000);
-                        video.currentTime = Math.min(offset, Number.isFinite(video.duration) ? Math.max(0, video.duration - 0.5) : offset);
-                      }}
-                    />
-                  ) : (
-                    <div className="cam-placeholder"><Video size={26} /><span>No recording segment</span></div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          {cameras.length === 0 ? (
+            <div className="empty" style={{ flex: 1 }}>
+              <div className="empty-title">No Cameras Added</div>
+              <div className="empty-sub">Go to Settings to add cameras manually or auto-discover ONVIF devices.</div>
+            </div>
+          ) : (
+            <div className={`cam-grid ${gridClass}`} style={{ flex: 1, minHeight: 0 }}>
+              {visibleCameras.map(cam => {
+                const rec = findRecording(cam.id, syncTargetMs);
+                return (
+                  <div className="cam-cell" key={cam.id}>
+                    <div className="cam-top"><div className="cam-name">{cam.name}</div><div className="cam-rec"><div className="cam-rec-dot" /> SYNC</div></div>
+                    {rec ? (
+                      <video
+                        ref={el => { syncVideoRefs.current[cam.id] = el; }}
+                        key={rec.url}
+                        src={recordingSrc(rec.url)}
+                        autoPlay={!syncPaused}
+                        muted
+                        playsInline
+                        onLoadedMetadata={e => {
+                          const video = e.currentTarget;
+                          const offset = Math.max(0, (syncTargetMs - rec.startTimestamp) / 1000);
+                          video.currentTime = Math.min(offset, Number.isFinite(video.duration) ? Math.max(0, video.duration - 0.5) : offset);
+                        }}
+                      />
+                    ) : (
+                      <div className="cam-placeholder"><Video size={26} /><span>No recording segment</span></div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       ) : (
         <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: viewMode === 'analytics' ? '1fr 300px' : '1fr', gap: 12, padding: 14 }}>
-          <div className={`cam-grid ${gridClass}`} style={{ minHeight: 0 }}>
-            {visibleCameras.map(cam => (
-              <CameraFeed
-                key={cam.id}
-                cam={cam}
-                iceServers={iceServers}
-                paused={livePaused}
-                analytics={viewMode === 'analytics'}
-                maximized={maximizedId === cam.id}
-                onMaximize={() => setMaximizedId(maximizedId === cam.id ? null : cam.id)}
-              />
-            ))}
-          </div>
+          {cameras.length === 0 ? (
+            <div className="empty" style={{ flex: 1 }}>
+              <div className="empty-title">No Cameras Added</div>
+              <div className="empty-sub">Go to Settings to add cameras manually or auto-discover ONVIF devices.</div>
+            </div>
+          ) : (
+            <div className={`cam-grid ${gridClass}`} style={{ minHeight: 0 }}>
+              {visibleCameras.map(cam => (
+                <CameraFeed
+                  key={cam.id}
+                  cam={cam}
+                  iceServers={iceServers}
+                  paused={livePaused}
+                  analytics={viewMode === 'analytics'}
+                  maximized={maximizedId === cam.id}
+                  onMaximize={() => setMaximizedId(maximizedId === cam.id ? null : cam.id)}
+                />
+              ))}
+            </div>
+          )}
           {viewMode === 'analytics' && (
             <div className="card" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
               <div className="card-head"><span className="card-title">Active Detections</span></div>
