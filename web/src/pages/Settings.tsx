@@ -1407,102 +1407,14 @@ const Settings: React.FC = () => {
           )}
 
           {tab === 'system' && (
-            <>
-            <div className="card">
-              <div className="card-head"><span className="card-title">System Information & Maintenance</span></div>
-              <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
-                
-                {/* Hardware Metrics Mockup */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-                  <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 700 }}>CPU Usage</div>
-                    <div style={{ fontSize: '1.2rem', color: 'var(--text-1)', fontWeight: 600, fontFamily: 'JetBrains Mono' }}>12.4%</div>
-                  </div>
-                  <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 700 }}>RAM Usage</div>
-                    <div style={{ fontSize: '1.2rem', color: 'var(--text-1)', fontWeight: 600, fontFamily: 'JetBrains Mono' }}>4.1 GB</div>
-                  </div>
-                  <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 700 }}>GPU / TPU Util</div>
-                    <div style={{ fontSize: '1.2rem', color: 'var(--cyan)', fontWeight: 600, fontFamily: 'JetBrains Mono' }}>42.8%</div>
-                  </div>
-                  <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 700 }}>Temperature</div>
-                    <div style={{ fontSize: '1.2rem', color: 'var(--green)', fontWeight: 600, fontFamily: 'JetBrains Mono' }}>48°C</div>
-                  </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 60 }}>
+              
+              {/* Card 1: System Information */}
+              <div className="card">
+                <div className="card-head">
+                  <span className="card-title">System Information</span>
                 </div>
-
-                {/* Auto-Purge Retention Policy */}
-                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-1)', marginBottom: 16 }}>Recording Retention Policy</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 20 }}>
-                    <div className="form-group">
-                      <label className="form-label">Auto-Purge Retention (Days)</label>
-                      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                        <input className="form-input" type="number" min="0" max="365"
-                          value={systemConfig.retention_days}
-                          onChange={e => setSystemConfig(c => ({ ...c, retention_days: parseInt(e.target.value) || 0 }))}
-                          style={{ width: 120 }} />
-                        <button className="btn btn-primary" onClick={() => saveSystemConfig()} disabled={savingConfig}>
-                          {savingConfig ? 'Saving...' : 'Save Policy'}
-                        </button>
-                      </div>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: 4 }}>
-                        Recorded video files older than this will be deleted automatically to save space. Set to 0 to disable auto-purge.
-                      </div>
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Development Cleanup</label>
-                      <select className="form-input" value={purgeCameraId} onChange={e => setPurgeCameraId(e.target.value)} style={{ marginBottom: 10, maxWidth: 260 }}>
-                        <option value="">All cameras</option>
-                        {cameras.map(cam => <option key={cam.id} value={cam.id}>{cam.name}</option>)}
-                      </select>
-                      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <button className="btn btn-danger" onClick={purgeRecordings} disabled={purgingRecordings}>
-                          {purgingRecordings ? 'Purging...' : <><Trash2 size={14} /> Purge Recordings</>}
-                        </button>
-                        <span style={{ color: 'var(--text-3)', fontSize: '0.72rem' }}>
-                          Current archive: {storageReport ? `${storageReport.total_gb} GB` : 'loading...'}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: 4 }}>
-                        Deletes all MP4 recording segments from disk. Camera settings and users are not changed.
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-1)', marginBottom: 16 }}>Stream Watchdog Diagnostics</div>
-                  <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-                    {Object.keys(streamDiagnostics).length === 0 ? (
-                      <div style={{ padding: 14, color: 'var(--text-3)', fontSize: '0.78rem' }}>No active recorder diagnostics available yet.</div>
-                    ) : (
-                      Object.entries(streamDiagnostics).map(([cameraId, diag]) => (
-                        <div key={cameraId} style={{ display: 'grid', gridTemplateColumns: '1.2fr 90px 90px 1fr', gap: 12, padding: '12px 14px', borderBottom: '1px solid var(--border)', alignItems: 'center', fontSize: '0.76rem' }}>
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ color: 'var(--text-1)', fontWeight: 700 }}>{diag.camera_name || cameraNameById[cameraId] || cameraId}</div>
-                            <div style={{ color: 'var(--text-3)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{maskRtspPassword(diag.stream_url || '')}</div>
-                          </div>
-                          <div>
-                            <div style={{ color: 'var(--text-3)', fontSize: '0.65rem', textTransform: 'uppercase' }}>Status</div>
-                            <div style={{ color: diag.task_done ? 'var(--red)' : 'var(--green)', fontWeight: 700 }}>{diag.task_done ? 'Stopped' : diag.status}</div>
-                          </div>
-                          <div>
-                            <div style={{ color: 'var(--text-3)', fontSize: '0.65rem', textTransform: 'uppercase' }}>Restarts</div>
-                            <div style={{ color: diag.restart_count > 0 ? 'var(--amber)' : 'var(--text-1)', fontFamily: 'JetBrains Mono' }}>{diag.restart_count}</div>
-                          </div>
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ color: 'var(--text-3)', fontSize: '0.65rem', textTransform: 'uppercase' }}>Last Error</div>
-                            <div style={{ color: diag.last_error ? 'var(--amber)' : 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{diag.last_error || 'None'}</div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
+                <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, color: 'var(--text-2)', fontSize: '0.85rem' }}>
                     {[
                       ['Platform', 'mView Sentinel NVR'],
@@ -1518,13 +1430,56 @@ const Settings: React.FC = () => {
                       </div>
                     ))}
                   </div>
-                </div>
 
-                <div style={{ marginTop: 20, padding: 16, border: '1px solid var(--border)', borderRadius: 8, background: 'rgba(255,255,255,0.02)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginTop: 10 }}>
+                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 700 }}>CPU Usage</div>
+                      <div style={{ fontSize: '1.2rem', color: 'var(--text-1)', fontWeight: 600, fontFamily: 'JetBrains Mono' }}>12.4%</div>
+                    </div>
+                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 700 }}>RAM Usage</div>
+                      <div style={{ fontSize: '1.2rem', color: 'var(--text-1)', fontWeight: 600, fontFamily: 'JetBrains Mono' }}>4.1 GB</div>
+                    </div>
+                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 700 }}>GPU / TPU Util</div>
+                      <div style={{ fontSize: '1.2rem', color: 'var(--cyan)', fontWeight: 600, fontFamily: 'JetBrains Mono' }}>42.8%</div>
+                    </div>
+                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 700 }}>Temperature</div>
+                      <div style={{ fontSize: '1.2rem', color: 'var(--green)', fontWeight: 600, fontFamily: 'JetBrains Mono' }}>48°C</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: Service Controls */}
+              <div className="card">
+                <div className="card-head">
+                  <span className="card-title">Service Controls</span>
+                </div>
+                <div style={{ padding: 24, display: 'flex', gap: 12 }}>
+                  <button className="btn btn-ghost" style={{ padding: '8px 16px' }} onClick={checkUpdates} disabled={checkingUpdates}>
+                    <Loader size={14} className={checkingUpdates ? 'spin' : ''}/> Check for Updates
+                  </button>
+                  <button className="btn btn-ghost" style={{ padding: '8px 16px' }} onClick={backupDatabase} disabled={backingUp}>
+                    <Edit2 size={14}/>{backingUp ? 'Preparing Backup...' : 'Backup Database'}
+                  </button>
+                  <button className="btn btn-danger" style={{ padding: '8px 16px', marginLeft: 'auto' }} onClick={restartServices} disabled={restarting}>
+                    {restarting ? 'Restarting...' : 'Restart NVR Service'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Card 3: Auto-Update Configuration */}
+              <div className="card">
+                <div className="card-head">
+                  <span className="card-title">Software Updates</span>
+                </div>
+                <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                     <div>
                       <div style={{ fontWeight: 600, color: 'var(--text-1)', fontSize: '0.85rem' }}>Auto Update Facility</div>
-                      <div style={{ color: 'var(--text-3)', fontSize: '0.72rem', marginTop: 3 }}>Checks the Sentinel update manifest and downloads the GitHub target in the background when enabled.</div>
+                      <div style={{ color: 'var(--text-3)', fontSize: '0.72rem', marginTop: 3 }}>Checks the Sentinel update manifest and downloads the target when enabled.</div>
                     </div>
                     <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-2)', fontSize: '0.8rem', cursor: 'pointer' }}>
                       <input
@@ -1562,197 +1517,181 @@ const Settings: React.FC = () => {
                       {savingConfig ? 'Saving...' : 'Save Update Settings'}
                     </button>
                   </div>
-                </div>
 
-                {updateInfo && (
-                  <div style={{ marginTop: 20, padding: 16, border: '1px solid var(--border)', borderRadius: 8, background: 'rgba(255,255,255,0.02)' }}>
-                    <div style={{ fontWeight: 600, color: 'var(--text-1)', marginBottom: 8, fontSize: '0.85rem' }}>Update Information</div>
-                    <div style={{ fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                        <span style={{ color: 'var(--text-2)' }}>Manifest:</span>
-                        <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{updateInfo.manifest_url || systemConfig.updates.manifest_url}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'var(--text-2)' }}>Current Commit:</span>
-                        <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)' }}>{updateInfo.current_sha}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'var(--text-2)' }}>Latest Commit:</span>
-                        <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)' }}>{updateInfo.latest_sha}</span>
-                      </div>
-                      {updateInfo.version && (
+                  {updateInfo && (
+                    <div style={{ marginTop: 14, padding: 16, border: '1px solid var(--border)', borderRadius: 8, background: 'rgba(255,255,255,0.02)' }}>
+                      <div style={{ fontWeight: 600, color: 'var(--text-1)', marginBottom: 8, fontSize: '0.85rem' }}>Update Information</div>
+                      <div style={{ fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                          <span style={{ color: 'var(--text-2)' }}>Manifest:</span>
+                          <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{updateInfo.manifest_url || systemConfig.updates.manifest_url}</span>
+                        </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ color: 'var(--text-2)' }}>Version:</span>
-                          <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)' }}>{updateInfo.version}</span>
+                          <span style={{ color: 'var(--text-2)' }}>Current Commit:</span>
+                          <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)' }}>{updateInfo.current_sha}</span>
                         </div>
-                      )}
-                      {updateInfo.error && (
-                        <div style={{ color: 'var(--amber)', marginTop: 8 }}>{updateInfo.error}</div>
-                      )}
-                      {updateInfo.update_available ? (
-                        <div style={{ color: 'var(--cyan)', marginTop: 8, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span>A new update is available.</span>
-                          <button className="btn btn-primary" onClick={installUpdate} disabled={updating} style={{ padding: '4px 10px', fontSize: '0.75rem' }}>
-                            {updating ? 'Downloading...' : 'Download & Install'}
-                          </button>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: 'var(--text-2)' }}>Latest Commit:</span>
+                          <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)' }}>{updateInfo.latest_sha}</span>
                         </div>
-                      ) : (
-                        <div style={{ color: 'var(--green)', marginTop: 8 }}>You are running the latest version.</div>
-                      )}
+                        {updateInfo.version && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ color: 'var(--text-2)' }}>Version:</span>
+                            <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)' }}>{updateInfo.version}</span>
+                          </div>
+                        )}
+                        {updateInfo.error && (
+                          <div style={{ color: 'var(--amber)', marginTop: 8 }}>{updateInfo.error}</div>
+                        )}
+                        {updateInfo.update_available ? (
+                          <div style={{ color: 'var(--cyan)', marginTop: 8, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span>A new update is available.</span>
+                            <button className="btn btn-primary" onClick={installUpdate} disabled={updating} style={{ padding: '4px 10px', fontSize: '0.75rem' }}>
+                              {updating ? 'Downloading...' : 'Download & Install'}
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ color: 'var(--green)', marginTop: 8 }}>You are running the latest version.</div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
-
-                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20, display: 'flex', gap: 12 }}>
-                  <button className="btn btn-ghost" style={{ padding: '8px 16px' }} onClick={checkUpdates} disabled={checkingUpdates}>
-                    <Loader size={14} className={checkingUpdates ? 'spin' : ''}/> Check for Updates
-                  </button>
-                  <button className="btn btn-ghost" style={{ padding: '8px 16px' }} onClick={backupDatabase} disabled={backingUp}>
-                    <Edit2 size={14}/>{backingUp ? 'Preparing Backup...' : 'Backup Database'}
-                  </button>
-                  <button className="btn btn-danger" style={{ padding: '8px 16px', marginLeft: 'auto' }} onClick={restartServices} disabled={restarting}>
-                    {restarting ? 'Restarting...' : 'Restart NVR Service'}
-                  </button>
+                  )}
                 </div>
               </div>
-            </div>
 
-            {isAdmin && (
-              <div className="card" style={{ border: '1px solid rgba(220, 53, 69, 0.4)', background: 'rgba(220, 53, 69, 0.02)', marginTop: 20 }}>
-                <div className="card-head" style={{ borderBottom: '1px solid rgba(220, 53, 69, 0.2)' }}>
-                  <span className="card-title" style={{ color: 'var(--red)' }}>DANGER ZONE</span>
+              {/* Card 4: Storage & Archive Policy */}
+              <div className="card">
+                <div className="card-head">
+                  <span className="card-title">Storage & Archive Policy</span>
+                </div>
+                <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+                    <div className="form-group">
+                      <label className="form-label">Auto-Purge Retention (Days)</label>
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                        <input className="form-input" type="number" min="0" max="365"
+                          value={systemConfig.retention_days}
+                          onChange={e => setSystemConfig(c => ({ ...c, retention_days: parseInt(e.target.value) || 0 }))}
+                          style={{ width: 120 }} />
+                        <button className="btn btn-primary" onClick={() => saveSystemConfig()} disabled={savingConfig}>
+                          {savingConfig ? 'Saving...' : 'Save Policy'}
+                        </button>
+                      </div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: 4 }}>
+                        Recorded video files older than this will be deleted automatically to save space. Set to 0 to disable auto-purge.
+                      </div>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Development Cleanup</label>
+                      <select className="form-input" value={purgeCameraId} onChange={e => setPurgeCameraId(e.target.value)} style={{ marginBottom: 10, maxWidth: 260 }}>
+                        <option value="">All cameras</option>
+                        {cameras.map(cam => <option key={cam.id} value={cam.id}>{cam.name}</option>)}
+                      </select>
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <button className="btn btn-danger" onClick={purgeRecordings} disabled={purgingRecordings}>
+                          {purgingRecordings ? 'Purging...' : <><Trash2 size={14} /> Purge Recordings</>}
+                        </button>
+                        <span style={{ color: 'var(--text-3)', fontSize: '0.72rem' }}>
+                          Current archive: {storageReport ? `${storageReport.total_gb} GB` : 'loading...'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: 4 }}>
+                        Deletes all MP4 recording segments from disk. Camera settings and users are not changed.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 5: Stream Diagnostics */}
+              <div className="card">
+                <div className="card-head">
+                  <span className="card-title">Stream Watchdog Diagnostics</span>
                 </div>
                 <div style={{ padding: 24 }}>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-2)', marginBottom: 16 }}>
-                    Factory resetting will stop all camera recorders, wipe all recording files from storage, remove all cameras from the configuration, and clear system logs. The NVR will be reset to default settings. <strong>This action cannot be undone.</strong>
-                  </div>
-                  <button 
-                    className="btn btn-danger" 
-                    onClick={() => setShowFactoryResetConfirm(true)} 
-                    disabled={factoryResetting}
-                    style={{ background: 'var(--red)', color: '#000', fontWeight: 'bold', padding: '10px 20px', border: 'none', display: 'inline-flex', marginTop: 12 }}
-                  >
-                    {factoryResetting ? 'Factory Resetting...' : 'Factory Reset NVR'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {showFactoryResetConfirm && (
-              <div className="modal-overlay" style={{ display: 'flex', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 1000, alignItems: 'center', justifyContent: 'center' }}>
-                <div className="card" style={{ width: '100%', maxWidth: 460, border: '1px solid var(--red)', background: 'var(--bg-2)' }}>
-                  <div className="card-head">
-                    <span className="card-title" style={{ color: 'var(--red)' }}>Confirm Factory Reset</span>
-                  </div>
-                  <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-1)' }}>
-                      Are you absolutely sure? This will permanently delete all cameras, recording segments, databases, and configuration settings.
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label" style={{ color: 'var(--text-2)' }}>Type <strong>RESET</strong> to confirm:</label>
-                      <input 
-                        className="form-input" 
-                        value={factoryResetConfirmText} 
-                        onChange={e => setFactoryResetConfirmText(e.target.value)}
-                        placeholder="RESET"
-                        style={{ border: '1px solid var(--red)', width: '100%', background: 'var(--bg-1)', color: 'var(--text-1)', padding: '8px 12px', borderRadius: 4 }}
-                      />
-                    </div>
-                    <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 12 }}>
-                      <button className="btn btn-ghost" onClick={() => { setShowFactoryResetConfirm(false); setFactoryResetConfirmText(''); }}>Cancel</button>
-                      <button className="btn btn-danger" onClick={handleFactoryReset} disabled={factoryResetting || factoryResetConfirmText !== 'RESET'}>
-                        {factoryResetting ? 'Wiping NVR...' : 'Wipe & Reset Everything'}
-                      </button>
-                    </div>
+                  <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+                    {Object.keys(streamDiagnostics).length === 0 ? (
+                      <div style={{ padding: 14, color: 'var(--text-3)', fontSize: '0.78rem' }}>No active recorder diagnostics available yet.</div>
+                    ) : (
+                      Object.entries(streamDiagnostics).map(([cameraId, diag]) => (
+                        <div key={cameraId} style={{ display: 'grid', gridTemplateColumns: '1.2fr 90px 90px 1fr', gap: 12, padding: '12px 14px', borderBottom: '1px solid var(--border)', alignItems: 'center', fontSize: '0.76rem' }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ color: 'var(--text-1)', fontWeight: 700 }}>{diag.camera_name || cameraNameById[cameraId] || cameraId}</div>
+                            <div style={{ color: 'var(--text-3)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{maskRtspPassword(diag.stream_url || '')}</div>
+                          </div>
+                          <div>
+                            <div style={{ color: 'var(--text-3)', fontSize: '0.65rem', textTransform: 'uppercase' }}>Status</div>
+                            <div style={{ color: diag.task_done ? 'var(--red)' : 'var(--green)', fontWeight: 700 }}>{diag.task_done ? 'Stopped' : diag.status}</div>
+                          </div>
+                          <div>
+                            <div style={{ color: 'var(--text-3)', fontSize: '0.65rem', textTransform: 'uppercase' }}>Restarts</div>
+                            <div style={{ color: diag.restart_count > 0 ? 'var(--amber)' : 'var(--text-1)', fontFamily: 'JetBrains Mono' }}>{diag.restart_count}</div>
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ color: 'var(--text-3)', fontSize: '0.65rem', textTransform: 'uppercase' }}>Last Error</div>
+                            <div style={{ color: diag.last_error ? 'var(--amber)' : 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{diag.last_error || 'None'}</div>
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
-            )}
 
-            {editingUser && (
-              <div className="modal-overlay" style={{ display: 'flex', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 1000, alignItems: 'center', justifyContent: 'center' }}>
-                <div className="card" style={{ width: '100%', maxWidth: 500, background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-                  <div className="card-head">
-                    <span className="card-title">Edit User: {editingUser.username}</span>
+              {/* Card 6: Danger Zone */}
+              {isAdmin && (
+                <div className="card" style={{ border: '1px solid rgba(220, 53, 69, 0.5)', background: 'rgba(220, 53, 69, 0.03)', marginBottom: 20 }}>
+                  <div className="card-head" style={{ borderBottom: '1px solid rgba(220, 53, 69, 0.2)' }}>
+                    <span className="card-title" style={{ color: 'var(--red)' }}>DANGER ZONE</span>
                   </div>
-                  <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    <div className="form-group">
-                      <label className="form-label">Username</label>
-                      <input 
-                        className="form-input" 
-                        value={editUserForm.username} 
-                        onChange={e => setEditUserForm(f => ({ ...f, username: e.target.value }))}
-                      />
+                  <div style={{ padding: 24 }}>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-2)', marginBottom: 16 }}>
+                      Factory resetting will stop all camera recorders, wipe all recording files from storage, remove all cameras from the configuration, and clear system logs. The NVR will be reset to default settings. <strong>This action cannot be undone.</strong>
                     </div>
+                    <button 
+                      className="btn btn-danger" 
+                      onClick={() => setShowFactoryResetConfirm(true)} 
+                      disabled={factoryResetting}
+                      style={{ background: 'var(--red)', color: '#000', fontWeight: 'bold', padding: '12px 24px', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+                    >
+                      {factoryResetting ? 'Factory Resetting...' : 'Factory Reset NVR'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
-                    <div className="form-group">
-                      <label className="form-label">New Password (leave blank to keep current)</label>
-                      <input 
-                        className="form-input" 
-                        type="password"
-                        value={editUserForm.password} 
-                        onChange={e => setEditUserForm(f => ({ ...f, password: e.target.value }))}
-                        placeholder="Enter new password"
-                      />
+              {showFactoryResetConfirm && (
+                <div className="modal-overlay" style={{ display: 'flex', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 1000, alignItems: 'center', justifyContent: 'center' }}>
+                  <div className="card" style={{ width: '100%', maxWidth: 460, border: '1px solid var(--red)', background: 'var(--bg-2)' }}>
+                    <div className="card-head">
+                      <span className="card-title" style={{ color: 'var(--red)' }}>Confirm Factory Reset</span>
                     </div>
-
-                    <div className="form-group">
-                      <label className="form-label">Role</label>
-                      <select
-                        className="form-select"
-                        value={editUserForm.role}
-                        onChange={e => {
-                          const role = e.target.value;
-                          setEditUserForm(f => ({
-                            ...f,
-                            role,
-                            permissions: role === 'admin' ? permissionOptions : f.permissions,
-                          }));
-                        }}
-                      >
-                        <option value="viewer">Viewer</option>
-                        <option value="operator">Operator</option>
-                        <option value="admin">Admin</option>
-                      </select>
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label" style={{ marginBottom: 8 }}>Permissions</label>
-                      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                        {permissionOptions.map(permission => (
-                          <label key={permission} style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-2)', fontSize: '0.8rem', textTransform: 'capitalize', cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={editUserForm.permissions.includes(permission)}
-                              disabled={editUserForm.role === 'admin'}
-                              onChange={e => setEditUserForm(f => ({
-                                ...f,
-                                permissions: e.target.checked
-                                  ? Array.from(new Set([...f.permissions, permission]))
-                                  : f.permissions.filter(p => p !== permission),
-                              }))}
-                              style={{ width: 16, height: 16, accentColor: 'var(--cyan)' }}
-                            />
-                            {permission}
-                          </label>
-                        ))}
+                    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-1)' }}>
+                        Are you absolutely sure? This will permanently delete all cameras, recording segments, databases, and configuration settings.
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label" style={{ color: 'var(--text-2)' }}>Type <strong>RESET</strong> to confirm:</label>
+                        <input 
+                          className="form-input" 
+                          value={factoryResetConfirmText} 
+                          onChange={e => setFactoryResetConfirmText(e.target.value)}
+                          placeholder="RESET"
+                          style={{ border: '1px solid var(--red)', width: '100%', background: 'var(--bg-1)', color: 'var(--text-1)', padding: '8px 12px', borderRadius: 4 }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 12 }}>
+                        <button className="btn btn-ghost" onClick={() => { setShowFactoryResetConfirm(false); setFactoryResetConfirmText(''); }}>Cancel</button>
+                        <button className="btn btn-danger" onClick={handleFactoryReset} disabled={factoryResetting || factoryResetConfirmText !== 'RESET'}>
+                          {factoryResetting ? 'Wiping NVR...' : 'Wipe & Reset Everything'}
+                        </button>
                       </div>
                     </div>
-
-                    <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 12 }}>
-                      <button className="btn btn-ghost" onClick={() => setEditingUser(null)}>Cancel</button>
-                      <button className="btn btn-primary" onClick={saveEditUser} disabled={savingEditUser}>
-                        {savingEditUser ? 'Saving...' : 'Save Changes'}
-                      </button>
-                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-            </>
-          )}
-
-          {tab === 'users' && (
+              )}
+            </div>
+          )}          {tab === 'users' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               <div className="card">
                 <div className="card-head">
