@@ -232,9 +232,24 @@ async def adopt_camera(
         data.ip, port, username, password
     )
 
+    def inject_rtsp_credentials(rtsp_url: str | None, user: str, psw: str) -> str | None:
+        if not rtsp_url or not user:
+            return rtsp_url
+        # If credentials already embedded, skip
+        if "@" in rtsp_url.split("//")[-1]:
+            return rtsp_url
+        prefix = "rtsp://"
+        if rtsp_url.startswith("rtsps://"):
+            prefix = "rtsps://"
+        body = rtsp_url[len(prefix):]
+        import urllib.parse
+        encoded_user = urllib.parse.quote(user)
+        encoded_pass = urllib.parse.quote(psw)
+        return f"{prefix}{encoded_user}:{encoded_pass}@{body}"
+
     if streams:
-        rtsp_main = streams[0].get("rtsp_url")
-        rtsp_sub  = streams[1].get("rtsp_url") if len(streams) > 1 else None
+        rtsp_main = inject_rtsp_credentials(streams[0].get("rtsp_url"), username, password)
+        rtsp_sub  = inject_rtsp_credentials(streams[1].get("rtsp_url"), username, password) if len(streams) > 1 else None
         resolution = streams[0].get("resolution")
     else:
         # Fall back to manufacturer-specific defaults

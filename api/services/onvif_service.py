@@ -84,6 +84,9 @@ def _get_local_subnets() -> list[str]:
     try:
         import netifaces
         for iface in netifaces.interfaces():
+            # Skip loopback, docker, bridge, tunnel and virtual interfaces to prevent slow scanning
+            if iface.startswith(('lo', 'docker', 'br-', 'veth', 'virbr', 'tun', 'tap', 'wg')):
+                continue
             addrs = netifaces.ifaddresses(iface)
             if netifaces.AF_INET in addrs:
                 for addr in addrs[netifaces.AF_INET]:
