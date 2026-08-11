@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import quote
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
@@ -89,7 +90,7 @@ class ReviewPayload(BaseModel):
 def _credentials(username: str, password: str) -> str:
     if not username:
         return ""
-    return f"{quote(username)}:{quote(password)}@"
+    return f"{quote(username, safe='')}:{quote(password, safe='')}@"
 
 
 def _channel_paths(vendor: str, channel: int, custom_main: str | None = None, custom_sub: str | None = None) -> tuple[str, str | None]:
@@ -232,7 +233,9 @@ async def list_nvrs(db: AsyncSession = Depends(get_db)):
 @router.post("/nvrs", status_code=201)
 async def create_nvr(payload: NVRCreate, db: AsyncSession = Depends(get_db)):
     preview = (await preview_nvr(payload))["channels"]
+    nvr_id = str(uuid.uuid4())
     nvr = NVRConnection(
+        id=nvr_id,
         name=payload.name,
         vendor=payload.vendor,
         host=payload.host,
@@ -261,7 +264,7 @@ async def create_nvr(payload: NVRCreate, db: AsyncSession = Depends(get_db)):
             status="online",
             auto_adopted=True,
             enabled=payload.enabled,
-            config={"source": "nvr", "nvr_id": nvr.id, "channel": channel["channel"]},
+            config={"source": "nvr", "nvr_id": nvr_id, "channel": channel["channel"]},
         )
         db.add(cam)
         created.append(cam)

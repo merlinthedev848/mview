@@ -38,6 +38,14 @@ class CameraUpdate(BaseModel):
 class CameraResponse(CameraBase):
     id: str
     status: str
+    live_stream_name: Optional[str] = None
+    main_stream_name: Optional[str] = None
+    sub_stream_name: Optional[str] = None
+    go2rtc_base_url: Optional[str] = None
+    go2rtc_webrtc_url: Optional[str] = None
+    go2rtc_mse_url: Optional[str] = None
+    go2rtc_hls_url: Optional[str] = None
+    snapshot_url: Optional[str] = None
     auto_adopted: bool
     created_at: datetime
     updated_at: datetime

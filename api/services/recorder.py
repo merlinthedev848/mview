@@ -27,10 +27,21 @@ RECORD_VIDEO_PRESET = settings.record_video_preset
 
 
 class CameraRecorder:
-    def __init__(self, camera_id: str, camera_name: str, rtsp_url: str):
+    def __init__(
+        self,
+        camera_id: str,
+        camera_name: str,
+        rtsp_url: str,
+        live_url: str,
+        main_url: str,
+        sub_url: str | None,
+    ):
         self.camera_id = camera_id
         self.camera_name = camera_name
         self.rtsp_url = rtsp_url
+        self.live_url = live_url
+        self.main_url = main_url
+        self.sub_url = sub_url
         self._task: asyncio.Task | None = None
         self._stop = False
         self.last_started_at: datetime | None = None
@@ -241,32 +252,49 @@ class RecorderManager:
                 if cam.config and "record_substream" in cam.config:
                     use_substream = cam.config.get("record_substream") is True
                 record_url = cam.rtsp_url_sub if (use_substream and cam.rtsp_url_sub) else cam.rtsp_url_main
+                live_url = cam.rtsp_url_sub or cam.rtsp_url_main
                 
                 if cam.id not in self._recorders:
-                    rec = CameraRecorder(cam.id, cam.name, record_url)
+                    rec = CameraRecorder(cam.id, cam.name, record_url, live_url, cam.rtsp_url_main, cam.rtsp_url_sub)
                     self._recorders[cam.id] = rec
                     rec.start()
                     await local_core.publish("recorder_started", {"camera_id": cam.id, "camera_name": cam.name})
                     logger.info(f"Started recorder for [{cam.name}] → {record_url}")
-                    live_url = cam.rtsp_url_sub or cam.rtsp_url_main
                     asyncio.create_task(register_go2rtc_stream(cam.id, live_url))
                     asyncio.create_task(register_go2rtc_stream(f"{cam.id}_main", cam.rtsp_url_main))
                     if cam.rtsp_url_sub:
                         asyncio.create_task(register_go2rtc_stream(f"{cam.id}_sub", cam.rtsp_url_sub))
                 else:
                     existing = self._recorders[cam.id]
+                    stream_changed = (
+                        existing.live_url != live_url
+                        or existing.main_url != cam.rtsp_url_main
+                        or existing.sub_url != cam.rtsp_url_sub
+                    )
                     if existing.rtsp_url != record_url or existing.camera_name != cam.name:
                         logger.info(f"Updating recorder for [{cam.name}] due to configuration change...")
                         existing.stop()
-                        rec = CameraRecorder(cam.id, cam.name, record_url)
+                        rec = CameraRecorder(cam.id, cam.name, record_url, live_url, cam.rtsp_url_main, cam.rtsp_url_sub)
                         self._recorders[cam.id] = rec
                         rec.start()
                         await local_core.publish("recorder_updated", {"camera_id": cam.id, "camera_name": cam.name})
-                        live_url = cam.rtsp_url_sub or cam.rtsp_url_main
                         asyncio.create_task(register_go2rtc_stream(cam.id, live_url))
                         asyncio.create_task(register_go2rtc_stream(f"{cam.id}_main", cam.rtsp_url_main))
                         if cam.rtsp_url_sub:
                             asyncio.create_task(register_go2rtc_stream(f"{cam.id}_sub", cam.rtsp_url_sub))
+                        else:
+                            asyncio.create_task(delete_go2rtc_stream(f"{cam.id}_sub"))
+                    elif stream_changed:
+                        existing.live_url = live_url
+                        existing.main_url = cam.rtsp_url_main
+                        existing.sub_url = cam.rtsp_url_sub
+                        await local_core.publish("recorder_streams_updated", {"camera_id": cam.id, "camera_name": cam.name})
+                        asyncio.create_task(register_go2rtc_stream(cam.id, live_url))
+                        asyncio.create_task(register_go2rtc_stream(f"{cam.id}_main", cam.rtsp_url_main))
+                        if cam.rtsp_url_sub:
+                            asyncio.create_task(register_go2rtc_stream(f"{cam.id}_sub", cam.rtsp_url_sub))
+                        else:
+                            asyncio.create_task(delete_go2rtc_stream(f"{cam.id}_sub"))
 
     def stop_all(self):
         for rec in self._recorders.values():
@@ -294,6 +322,15 @@ class RecorderManager:
 recorder_manager = RecorderManager()
 
 
+def _recording_camera_dir(camera_id: str) -> Path | None:
+    """Resolve a camera recording directory without allowing traversal outside the store."""
+    candidate = (RECORDINGS_BASE / camera_id).resolve()
+    base = RECORDINGS_BASE.resolve()
+    if candidate == base or base not in candidate.parents:
+        return None
+    return candidate
+
+
 def list_recordings(camera_id: str | None = None) -> list[dict]:
     """Return a list of recording files, optionally filtered by camera."""
     results = []
@@ -301,7 +338,11 @@ def list_recordings(camera_id: str | None = None) -> list[dict]:
     if not base.exists():
         return results
 
-    cam_dirs = [base / camera_id] if camera_id else [d for d in base.iterdir() if d.is_dir()]
+    if camera_id:
+        cam_dir = _recording_camera_dir(camera_id)
+        cam_dirs = [cam_dir] if cam_dir else []
+    else:
+        cam_dirs = [d for d in base.iterdir() if d.is_dir()]
 
     max_results = 50000
     for cam_dir in cam_dirs:
@@ -422,7 +463,11 @@ def purge_all_recordings(camera_id: str | None = None) -> dict:
     if not RECORDINGS_BASE.exists():
         return {"deleted_files": 0, "deleted_gb": 0.0}
 
-    camera_dirs = [RECORDINGS_BASE / camera_id] if camera_id else list(RECORDINGS_BASE.iterdir())
+    if camera_id:
+        cam_dir = _recording_camera_dir(camera_id)
+        camera_dirs = [cam_dir] if cam_dir else []
+    else:
+        camera_dirs = list(RECORDINGS_BASE.iterdir())
     for cam_dir in camera_dirs:
         if not cam_dir.is_dir():
             continue

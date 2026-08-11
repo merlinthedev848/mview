@@ -19,11 +19,11 @@ curl -sSL https://raw.githubusercontent.com/merlinthedev848/mview/main/install.s
 The installer will automatically:
 - Install Docker and Docker Compose (if missing).
 - Detect your hardware (NVIDIA GPU, Intel CPU, Google Coral TPU).
+- Generate a persistent `.env` with strong admin, database, and JWT secrets.
 - Create persistent storage volumes in `/mnt/storage/mview`.
 - Boot the cluster!
 
-**Dashboard URL:** `http://localhost:5173`
-**API URL:** `http://localhost:8000`
+**Dashboard / API URL:** `http://localhost:8000`
 
 ---
 

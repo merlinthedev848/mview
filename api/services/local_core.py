@@ -15,6 +15,7 @@ import shutil
 import time
 from datetime import datetime
 from typing import Any
+from urllib.parse import quote
 
 import psutil
 from sqlalchemy import desc, select
@@ -179,12 +180,16 @@ def _camera_payload(camera: Camera) -> dict[str, Any]:
         "name": camera.name,
         "status": camera.status,
         "enabled": camera.enabled,
-        "rtsp_url_main": camera.rtsp_url_main,
-        "rtsp_url_sub": camera.rtsp_url_sub,
         "manufacturer": camera.manufacturer,
         "model": camera.model,
         "resolution": camera.resolution,
-        "onvif_endpoint": camera.onvif_endpoint,
+        "live_stream_name": camera.id,
+        "main_stream_name": f"{camera.id}_main",
+        "sub_stream_name": f"{camera.id}_sub",
+        "go2rtc_webrtc_path": f"/webrtc.html?src={quote(camera.id, safe='')}",
+        "go2rtc_mse_path": f"/stream.html?src={quote(camera.id, safe='')}",
+        "go2rtc_hls_path": f"/api/stream.m3u8?src={quote(camera.id, safe='')}",
+        "snapshot_url": f"/cameras/{quote(camera.id, safe='')}/snapshot",
     }
 
 
@@ -199,4 +204,3 @@ def _event_payload(event: SemanticEvent) -> dict[str, Any]:
 
 
 local_core = LocalCore()
-

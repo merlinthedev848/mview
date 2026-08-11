@@ -13,7 +13,7 @@ router = APIRouter(prefix="/events", tags=["events"])
 async def get_events(
     camera_id: Optional[str] = None,
     object_class: Optional[str] = None,
-    limit: int = 50,
+    limit: int = Query(default=50, ge=1, le=500),
     db: AsyncSession = Depends(get_db)
 ):
     """Retrieve AI events with optional filtering."""

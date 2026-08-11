@@ -18,9 +18,13 @@ services:
     security_opt:
       - apparmor=unconfined
     environment:
-      - DATABASE_URL=postgresql+asyncpg://sentinel:sentinel@127.0.0.1:5432/sentinelnvr
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set; run ./install.sh}@127.0.0.1:5432/${POSTGRES_DB:-sentinelnvr}
       - REDIS_URL=redis://127.0.0.1:6379/0
       - MQTT_BROKER=127.0.0.1
+      - MQTT_USERNAME=${MQTT_USERNAME:?MQTT_USERNAME must be set; run ./install.sh}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:?MQTT_PASSWORD must be set; run ./install.sh}
+      - SENTINEL_JWT_SECRET=${SENTINEL_JWT_SECRET:?SENTINEL_JWT_SECRET must be set; run ./install.sh}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:?ADMIN_PASSWORD must be set; run ./install.sh}
       - RECORDINGS_DIR=/mnt/storage/mview/recordings
       - SEGMENT_SECONDS=60
       - RECORD_SUBSTREAM_DEFAULT=true
@@ -51,6 +55,8 @@ services:
     environment:
       - MQTT_BROKER=127.0.0.1
       - MQTT_PORT=1883
+      - MQTT_USERNAME=${MQTT_USERNAME:?MQTT_USERNAME must be set; run ./install.sh}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:?MQTT_PASSWORD must be set; run ./install.sh}
       - STREAM_URL=rtsp://127.0.0.1:8554/camera1
       - CAMERA_ID=default_cam
       - ACCELERATOR=cpu
@@ -71,16 +77,16 @@ services:
     security_opt:
       - apparmor=unconfined
     environment:
-      - POSTGRES_USER=sentinel
-      - POSTGRES_PASSWORD=sentinel
-      - POSTGRES_DB=sentinelnvr
+      - POSTGRES_USER=${POSTGRES_USER:-sentinel}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set; run ./install.sh}
+      - POSTGRES_DB=${POSTGRES_DB:-sentinelnvr}
     volumes:
       - postgres_data:/var/lib/postgresql
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinelnvr"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER:-sentinel}\" -d \"$${POSTGRES_DB:-sentinelnvr}\""]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -94,7 +100,7 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -109,8 +115,9 @@ services:
       - apparmor=unconfined
     volumes:
       - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ./config/passwords:/mosquitto/config/passwords:ro
     ports:
-      - "1883:1883"
+      - "127.0.0.1:1883:1883"
     restart: unless-stopped
 
 volumes:

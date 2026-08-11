@@ -1,6 +1,7 @@
 import asyncio
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +14,7 @@ from api.schemas.camera import CameraResponse, CameraCreate, CameraUpdate, ONVIF
 from api.services.onvif_service import onvif_service
 from api.services.recorder import recorder_manager
 from api.services.local_core import local_core
+from api.routers.auth import get_current_user
 
 router = APIRouter(prefix="/cameras", tags=["Cameras"])
 
@@ -28,33 +30,97 @@ class PTZMove(BaseModel):
     speed: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
+def _require_settings(current_user: dict) -> None:
+    if current_user.get("role") != "admin" and "settings" not in set(current_user.get("permissions") or []):
+        raise HTTPException(status_code=403, detail="Settings permission required")
+
+
+def _go2rtc_base_url(request: Request) -> str:
+    host = request.url.hostname or "localhost"
+    scheme = "https" if request.url.scheme == "https" else "http"
+    return f"{scheme}://{host}:1984"
+
+
+def _live_stream_payload(camera_id: str, request: Request) -> dict:
+    live_stream_name = camera_id
+    encoded = quote(live_stream_name, safe="")
+    base_url = _go2rtc_base_url(request).rstrip("/")
+    return {
+        "live_stream_name": live_stream_name,
+        "main_stream_name": f"{camera_id}_main",
+        "sub_stream_name": f"{camera_id}_sub",
+        "go2rtc_base_url": base_url,
+        "go2rtc_webrtc_url": f"{base_url}/webrtc.html?src={encoded}",
+        "go2rtc_mse_url": f"{base_url}/stream.html?src={encoded}",
+        "go2rtc_hls_url": f"{base_url}/api/stream.m3u8?src={encoded}",
+        "snapshot_url": f"/cameras/{quote(camera_id, safe='')}/snapshot",
+    }
+
+
+def _camera_payload(cam: Camera, request: Request, can_view_settings: bool, recording_ids: dict | None = None) -> dict:
+    recording_ids = recording_ids or {}
+    return {
+        "id": cam.id,
+        "name": cam.name,
+        "rtsp_url_main": cam.rtsp_url_main if can_view_settings else None,
+        "rtsp_url_sub": cam.rtsp_url_sub if can_view_settings else None,
+        "onvif_endpoint": cam.onvif_endpoint if can_view_settings else None,
+        "onvif_username": cam.onvif_username if can_view_settings else None,
+        "onvif_password": cam.onvif_password if can_view_settings else None,
+        "manufacturer": cam.manufacturer,
+        "model": cam.model,
+        "resolution": cam.resolution,
+        "enabled": cam.enabled,
+        "config": cam.config if can_view_settings else None,
+        "status": "recording" if cam.id in recording_ids else cam.status,
+        "auto_adopted": cam.auto_adopted,
+        "created_at": cam.created_at,
+        "updated_at": cam.updated_at,
+        **_live_stream_payload(cam.id, request),
+    }
+
+
 @router.get("", response_model=List[CameraResponse])
-async def get_cameras(db: AsyncSession = Depends(get_db)):
+async def get_cameras(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(select(Camera))
     cams = result.scalars().all()
     
     # Inject active recording status dynamically
     recording_ids = recorder_manager.status()
-    for cam in cams:
-        if cam.id in recording_ids:
-            cam.status = "recording"
-            
-    return cams
+    can_view_settings = current_user.get("role") == "admin" or "settings" in set(current_user.get("permissions") or [])
+    return [_camera_payload(cam, request, can_view_settings, recording_ids) for cam in cams]
 
 
 @router.post("", response_model=CameraResponse, status_code=201)
-async def create_camera(camera: CameraCreate, db: AsyncSession = Depends(get_db)):
+async def create_camera(
+    request: Request,
+    camera: CameraCreate,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_settings(current_user)
     data = camera.model_dump()
     new_cam = Camera(**data)
     db.add(new_cam)
     await db.commit()
     await db.refresh(new_cam)
     await _refresh_recorder(db)
-    return new_cam
+    return _camera_payload(new_cam, request, True, recorder_manager.status())
 
 
 @router.patch("/{camera_id}", response_model=CameraResponse)
-async def update_camera(camera_id: str, update: CameraUpdate, db: AsyncSession = Depends(get_db)):
+async def update_camera(
+    request: Request,
+    camera_id: str,
+    update: CameraUpdate,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_settings(current_user)
     result = await db.execute(select(Camera).where(Camera.id == camera_id))
     cam = result.scalar_one_or_none()
     if not cam:
@@ -64,11 +130,16 @@ async def update_camera(camera_id: str, update: CameraUpdate, db: AsyncSession =
     await db.commit()
     await db.refresh(cam)
     await _refresh_recorder(db)
-    return cam
+    return _camera_payload(cam, request, True, recorder_manager.status())
 
 
 @router.delete("/{camera_id}")
-async def delete_camera(camera_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_camera(
+    camera_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_settings(current_user)
     result = await db.execute(select(Camera).where(Camera.id == camera_id))
     cam = result.scalar_one_or_none()
     if not cam:
@@ -165,8 +236,9 @@ async def stop_camera_ptz(camera_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/discover", response_model=List[ONVIFDiscoveryResult])
-async def discover_cameras():
+async def discover_cameras(current_user: dict = Depends(get_current_user)):
     """Scan network for ONVIF cameras (WS-Discovery + IP range scan fallback)."""
+    _require_settings(current_user)
     try:
         return await onvif_service.discover_cameras(timeout=4)
     except Exception as e:
@@ -175,48 +247,55 @@ async def discover_cameras():
 
 def get_default_rtsp_paths(manufacturer: str | None, model: str | None, ip: str, username: str, password: str) -> tuple[str, str | None]:
     m = (manufacturer or "").lower()
+    import urllib.parse
+    encoded_user = urllib.parse.quote(username, safe="")
+    encoded_pass = urllib.parse.quote(password, safe="")
+    credentials = f"{encoded_user}:{encoded_pass}@" if username else ""
     
     if "hikvision" in m or "hik" in m:
         return (
-            f"rtsp://{username}:{password}@{ip}:554/Streaming/Channels/101",
-            f"rtsp://{username}:{password}@{ip}:554/Streaming/Channels/102"
+            f"rtsp://{credentials}{ip}:554/Streaming/Channels/101",
+            f"rtsp://{credentials}{ip}:554/Streaming/Channels/102"
         )
     elif "dahua" in m or "amcrest" in m or "lts" in m:
         return (
-            f"rtsp://{username}:{password}@{ip}:554/cam/realmonitor?channel=1&subtype=0",
-            f"rtsp://{username}:{password}@{ip}:554/cam/realmonitor?channel=1&subtype=1"
+            f"rtsp://{credentials}{ip}:554/cam/realmonitor?channel=1&subtype=0",
+            f"rtsp://{credentials}{ip}:554/cam/realmonitor?channel=1&subtype=1"
         )
     elif "reolink" in m:
         return (
-            f"rtsp://{username}:{password}@{ip}:554/h264Preview_01_main",
-            f"rtsp://{username}:{password}@{ip}:554/h264Preview_01_sub"
+            f"rtsp://{credentials}{ip}:554/h264Preview_01_main",
+            f"rtsp://{credentials}{ip}:554/h264Preview_01_sub"
         )
     elif "axis" in m:
         return (
-            f"rtsp://{username}:{password}@{ip}:554/axis-media/media.amp",
+            f"rtsp://{credentials}{ip}:554/axis-media/media.amp",
             None
         )
     elif "foscam" in m:
         return (
-            f"rtsp://{username}:{password}@{ip}:554/videoMain",
-            f"rtsp://{username}:{password}@{ip}:554/videoSub"
+            f"rtsp://{credentials}{ip}:554/videoMain",
+            f"rtsp://{credentials}{ip}:554/videoSub"
         )
     else:
         # Generic fallback
         return (
-            f"rtsp://{username}:{password}@{ip}:554/stream1",
-            f"rtsp://{username}:{password}@{ip}:554/stream2"
+            f"rtsp://{credentials}{ip}:554/stream1",
+            f"rtsp://{credentials}{ip}:554/stream2"
         )
 
 
 @router.post("/adopt", response_model=CameraResponse, status_code=201)
 async def adopt_camera(
+    request: Request,
     data: ONVIFDiscoveryResult,
-    username: str = "admin",
-    password: str = "admin",
+    username: str = "",
+    password: str = "",
+    current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Probe a discovered device for RTSP streams, then save it."""
+    _require_settings(current_user)
     import urllib.parse
     port = 80
     if data.onvif_endpoint:
@@ -243,8 +322,8 @@ async def adopt_camera(
             prefix = "rtsps://"
         body = rtsp_url[len(prefix):]
         import urllib.parse
-        encoded_user = urllib.parse.quote(user)
-        encoded_pass = urllib.parse.quote(psw)
+        encoded_user = urllib.parse.quote(user, safe="")
+        encoded_pass = urllib.parse.quote(psw, safe="")
         return f"{prefix}{encoded_user}:{encoded_pass}@{body}"
 
     if streams:
@@ -275,4 +354,4 @@ async def adopt_camera(
     await db.commit()
     await db.refresh(cam)
     await _refresh_recorder(db)
-    return cam
+    return _camera_payload(cam, request, True, recorder_manager.status())

@@ -15,6 +15,6 @@ COPY api/requirements.txt ./api/
 RUN pip install uv && uv pip install --system --no-cache -r api/requirements.txt
 
 COPY api /app/api
-COPY web/dist /app/web/dist
+RUN mkdir -p /app/web/dist
 
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

@@ -2,11 +2,12 @@
 # This file overrides default environment variables and provides structured config
 
 system:
-  database_url: "postgresql+asyncpg://mview:mview@localhost:5432/mview"
+  database_url: "postgresql+asyncpg://sentinel:${POSTGRES_PASSWORD}@localhost:5432/sentinelnvr"
   mqtt_broker: "localhost"
   redis_url: "redis://localhost:6379/0"
   storage_path: "/mnt/storage/mview"
-  jwt_secret: "super-secret-mview-key"
+  # Runtime secrets are generated into /opt/mview-sentinel/.env by install.sh.
+  jwt_secret: ""
 
 ai:
   # Hardware acceleration: auto, cpu, cuda, openvino

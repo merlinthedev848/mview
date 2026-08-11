@@ -13,6 +13,8 @@ logger = logging.getLogger("mView-Detector")
 
 MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
 MQTT_PORT = int(os.getenv("MQTT_PORT", 1883))
+MQTT_USERNAME = os.getenv("MQTT_USERNAME", "")
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
 MODEL_NAME = os.getenv("DETECTOR_MODEL", "yolov8n.pt")
 ACCELERATOR = os.getenv("ACCELERATOR", "cpu").lower()
 FRAME_STRIDE = max(1, int(os.getenv("FRAME_STRIDE", "6")))
@@ -44,6 +46,8 @@ class DetectorNode:
         logger.info(f"Connecting to MQTT Broker at {MQTT_BROKER}:{MQTT_PORT}...")
         self.mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         try:
+            if MQTT_USERNAME:
+                self.mqtt_client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
             self.mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
             self.mqtt_client.loop_start()
         except Exception as e:

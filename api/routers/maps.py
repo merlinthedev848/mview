@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from api.database import get_db
 from api.models.camera import Camera
+from api.routers.auth import get_current_user
 import shutil
 import os
 import uuid
@@ -13,6 +14,11 @@ router = APIRouter(prefix="/maps", tags=["maps"])
 UPLOAD_DIR = os.getenv("STORAGE_PATH", "/mnt/storage/mview") + "/maps"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 CONFIG_PATH = Path(UPLOAD_DIR) / "default.json"
+
+
+def _require_settings(current_user: dict) -> None:
+    if current_user.get("role") != "admin" and "settings" not in set(current_user.get("permissions") or []):
+        raise HTTPException(status_code=403, detail="Settings permission required")
 
 
 def _public_url(filename: str) -> str:
@@ -34,8 +40,12 @@ def _write_config(config: dict) -> None:
     CONFIG_PATH.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
 @router.post("/upload")
-async def upload_floorplan(file: UploadFile = File(...)):
+async def upload_floorplan(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
     """Upload a floorplan image to the server."""
+    _require_settings(current_user)
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Invalid image file")
     
@@ -57,8 +67,14 @@ async def upload_floorplan(file: UploadFile = File(...)):
     return {"status": "success", "map_id": file_id, "url": _public_url(filename)}
 
 @router.post("/{map_id}/cameras")
-async def save_camera_positions(map_id: str, positions: list = Body(...), db: AsyncSession = Depends(get_db)):
+async def save_camera_positions(
+    map_id: str,
+    positions: list = Body(...),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Save camera [x, y, rotation] coordinates for the Map View."""
+    _require_settings(current_user)
     valid_positions = []
     for item in positions:
         if not isinstance(item, dict) or not item.get("id"):

@@ -78,13 +78,19 @@ class Settings(BaseSettings):
         default=1883,
         validation_alias=AliasChoices("SENTINEL_MQTT_PORT", "MQTT_PORT"),
     )
-    mqtt_username: str = ""
-    mqtt_password: str = ""
+    mqtt_username: str = Field(
+        default="",
+        validation_alias=AliasChoices("SENTINEL_MQTT_USERNAME", "MQTT_USERNAME"),
+    )
+    mqtt_password: str = Field(
+        default="",
+        validation_alias=AliasChoices("SENTINEL_MQTT_PASSWORD", "MQTT_PASSWORD"),
+    )
     mqtt_client_id: str = "sentinel-api"
 
     # ── JWT / Auth ──────────────────────────────────────────────────────
     jwt_secret: str = Field(
-        default="CHANGE-ME-IN-PRODUCTION-USE-RANDOM-SECRET",
+        default="",
         validation_alias=AliasChoices("SENTINEL_JWT_SECRET", "JWT_SECRET"),
         description="Secret key for JWT signing – MUST be changed in production.",
     )
@@ -100,7 +106,7 @@ class Settings(BaseSettings):
 
     # ── Default Admin ───────────────────────────────────────────────────
     default_admin_username: str = "admin"
-    default_admin_password: str = "admin"
+    default_admin_password: str = ""
     default_admin_email: str = "admin@sentinel.local"
 
     # ── Storage ─────────────────────────────────────────────────────────

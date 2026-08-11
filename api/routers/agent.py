@@ -10,6 +10,7 @@ from api.database import get_db
 from api.models.camera import Camera
 from api.models.ai import SemanticEvent
 from api.config import settings
+from api.routers.auth import get_current_user
 
 logger = logging.getLogger("mView-Agent")
 router = APIRouter(prefix="/agent", tags=["agent"])
@@ -357,7 +358,13 @@ async def handle_fallback_agent(message: str, db: AsyncSession) -> dict:
     }
 
 @router.post("/chat")
-async def chat_agent(req: ChatRequest, db: AsyncSession = Depends(get_db)):
+async def chat_agent(
+    req: ChatRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if current_user.get("role") != "admin" and "settings" not in set(current_user.get("permissions") or []):
+        raise HTTPException(status_code=403, detail="Settings permission required")
     provider = settings.ai_provider
     if provider == "gemini" and settings.gemini_api_key:
         return await handle_gemini_agent(req, db)

@@ -75,6 +75,8 @@ async def lifespan(app: FastAPI):
 
     # DB tables
     from sqlalchemy import text, select
+    if not settings.jwt_secret:
+        raise RuntimeError("SENTINEL_JWT_SECRET must be set. Run install.sh or provide a secure JWT secret.")
     async with engine.begin() as conn:
         if engine.url.get_backend_name().startswith("postgresql"):
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
@@ -87,6 +89,8 @@ async def lifespan(app: FastAPI):
         existing_users = await db.execute(select(User.id).limit(1))
         if existing_users.scalar_one_or_none() is None:
             admin_password = os.getenv("ADMIN_PASSWORD", settings.default_admin_password)
+            if not admin_password:
+                raise RuntimeError("ADMIN_PASSWORD must be set before the first startup.")
             db.add(User(
                 username=settings.default_admin_username,
                 hashed_password=get_password_hash(admin_password),
@@ -138,8 +142,8 @@ app = FastAPI(title="mView Sentinel", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=settings.cors_origins,
+    allow_credentials=settings.cors_origins != ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -162,10 +166,12 @@ async def auth_middleware(request: Request, call_next):
         ("/recordings", {"playback"}),
         ("/events", {"events"}),
         ("/maps", {"live", "settings"}),
+        ("/static/maps", {"live", "settings"}),
         ("/ops-api", {"operations", "settings"}),
         ("/system/live", {"live", "settings"}),
         ("/system", {"settings"}),
         ("/users", {"settings"}),
+        ("/agent", {"settings"}),
     ]
 
     required = None
@@ -184,7 +190,7 @@ async def auth_middleware(request: Request, call_next):
         token = None
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.split(" ")[1]
-        elif path.startswith("/recordings/") or path == "/system/live":
+        elif path.startswith("/recordings/") or path.startswith("/static/maps/") or path == "/system/live":
             token = request.query_params.get("token")
 
         if not token:
@@ -284,6 +290,7 @@ async def serve_recording(camera_id: str, filename: str, request: Request):
 
 # ── Frontend SPA — ALWAYS registered, handles missing build gracefully ──
 DIST = Path(__file__).parent.parent / "web" / "dist"
+DIST_ROOT = DIST.resolve()
 INDEX = DIST / "index.html"
 
 # Mount /assets only if the built assets folder exists
@@ -297,7 +304,7 @@ FALLBACK_HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>mView Sentinel — Building…</title>
+<title>mView Sentinel - Building</title>
 <style>
   body { background: #0d1520; color: #00f0d4; font-family: monospace;
          display:flex; align-items:center; justify-content:center; height:100vh; margin:0; flex-direction:column; gap:16px; }
@@ -308,7 +315,7 @@ FALLBACK_HTML = """<!DOCTYPE html>
 </style>
 </head>
 <body>
-  <h1>⬡ mView Sentinel</h1>
+  <h1>mView Sentinel</h1>
   <p>The API is running but the frontend was not compiled into this image.<br>
      Check your Docker build logs, then redeploy:</p>
   <code>cd /opt/mview-sentinel && docker compose up -d --build</code>
@@ -322,7 +329,9 @@ async def serve_spa(request: Request, full_path: str):
     """Catch-all: serve the React SPA, or a useful fallback if not built yet."""
     # Try to serve a real file from dist first
     if DIST.exists() and full_path:
-        candidate = DIST / full_path
+        candidate = (DIST / full_path).resolve()
+        if DIST_ROOT not in candidate.parents:
+            raise HTTPException(400, "Invalid static asset path")
         if candidate.exists() and candidate.is_file():
             return FileResponse(str(candidate))
 

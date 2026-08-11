@@ -116,7 +116,12 @@ async def process_mqtt_events():
     
     while True:
         try:
-            async with MQTTClient(MQTT_BROKER, port=MQTT_PORT) as client:
+            async with MQTTClient(
+                MQTT_BROKER,
+                port=MQTT_PORT,
+                username=settings.mqtt_username or None,
+                password=settings.mqtt_password or None,
+            ) as client:
                 await client.subscribe("sentinel/events/#")
                 logger.info("Subscribed to sentinel/events/#")
                 
