@@ -88,6 +88,7 @@ const CameraFeedComponent: React.FC<{
   const [useMjpegFallback, setUseMjpegFallback] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [connected, setConnected] = useState(false);
+  const [useMjpegFallback, setUseMjpegFallback] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
   const [showPTZ, setShowPTZ] = useState(false);
   const streamName = maximized ? `${cam.id}_main` : cam.rtsp_url_sub ? `${cam.id}_sub` : cam.id;
@@ -114,13 +115,8 @@ const CameraFeedComponent: React.FC<{
 
     const fallbackToHls = () => {
       sessionStorage.setItem('webrtc_failed', 'true');
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-        videoRef.current.src = go2rtcUrl(`/api/manifest.m3u8?src=${encodeURIComponent(streamName)}`);
-        videoRef.current.load();
-        videoRef.current.play().catch(e => console.log("HLS play error:", e));
-        setConnected(true);
-      }
+      setUseMjpegFallback(true);
+      setConnected(true);
     };
 
     const webrtcFailed = sessionStorage.getItem('webrtc_failed') === 'true';
@@ -338,21 +334,37 @@ const CameraFeedComponent: React.FC<{
         </div>
       ) : (
         <>
-          <video 
-            ref={videoRef} 
-            autoPlay 
-            playsInline 
-            muted={isMuted} 
-            style={{ 
-              width: '100%', 
-              height: '100%', 
-              objectFit: 'cover',
-              transform: isZoomMode ? `scale(${zoomScale}) translate(${zoomOffset.x}px, ${zoomOffset.y}px)` : 'none',
-              transformOrigin: 'center center',
-              transition: isPanning ? 'none' : 'transform 0.1s ease',
-              cursor: isZoomMode ? (isPanning ? 'grabbing' : 'grab') : 'default'
-            }} 
-          />
+          {useMjpegFallback ? (
+            <img 
+              src={go2rtcUrl(`/api/stream.mjpeg?src=${encodeURIComponent(streamName)}`)}
+              alt="MJPEG Fallback"
+              style={{ 
+                width: '100%', 
+                height: '100%', 
+                objectFit: 'cover',
+                transform: isZoomMode ? `scale(${zoomScale}) translate(${zoomOffset.x}px, ${zoomOffset.y}px)` : 'none',
+                transformOrigin: 'center center',
+                transition: isPanning ? 'none' : 'transform 0.1s ease',
+                cursor: isZoomMode ? (isPanning ? 'grabbing' : 'grab') : 'default'
+              }} 
+            />
+          ) : (
+            <video 
+              ref={videoRef} 
+              autoPlay 
+              playsInline 
+              muted={isMuted} 
+              style={{ 
+                width: '100%', 
+                height: '100%', 
+                objectFit: 'cover',
+                transform: isZoomMode ? `scale(${zoomScale}) translate(${zoomOffset.x}px, ${zoomOffset.y}px)` : 'none',
+                transformOrigin: 'center center',
+                transition: isPanning ? 'none' : 'transform 0.1s ease',
+                cursor: isZoomMode ? (isPanning ? 'grabbing' : 'grab') : 'default'
+              }} 
+            />
+          )}
           {!connected && (
             <div className="cam-connecting">
               <div className="spinner" />

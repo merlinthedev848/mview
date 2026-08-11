@@ -14,6 +14,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [useMjpegFallback, setUseMjpegFallback] = useState(false);
 
   // States for tools
   const [isMuted, setIsMuted] = useState(true);
@@ -37,13 +38,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
 
     const fallbackToHls = () => {
       sessionStorage.setItem('webrtc_failed', 'true');
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-        videoRef.current.src = go2rtcUrl(`/api/manifest.m3u8?src=${cameraId}`);
-        videoRef.current.load();
-        videoRef.current.play().catch(e => console.log("HLS play error:", e));
-        setIsStreaming(true);
-      }
+      setUseMjpegFallback(true);
+      setIsStreaming(true);
     };
 
     const webrtcFailed = sessionStorage.getItem('webrtc_failed') === 'true';
@@ -265,21 +261,37 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
     >
       {/* Video Element */}
       {status !== 'offline' ? (
-        <video 
-          ref={videoRef}
-          autoPlay 
-          playsInline 
-          muted={isMuted} 
-          style={{ 
-            width: '100%', 
-            height: '100%', 
-            objectFit: 'cover',
-            transform: isZoomMode ? `scale(${zoomScale}) translate(${zoomOffset.x}px, ${zoomOffset.y}px)` : 'none',
-            transformOrigin: 'center center',
-            transition: isPanning ? 'none' : 'transform 0.1s ease',
-            cursor: isZoomMode ? (isPanning ? 'grabbing' : 'grab') : 'default'
-          }} 
-        />
+        useMjpegFallback ? (
+          <img 
+            src={go2rtcUrl(`/api/stream.mjpeg?src=${cameraId}`)}
+            alt="MJPEG Fallback"
+            style={{ 
+              width: '100%', 
+              height: '100%', 
+              objectFit: 'cover',
+              transform: isZoomMode ? `scale(${zoomScale}) translate(${zoomOffset.x}px, ${zoomOffset.y}px)` : 'none',
+              transformOrigin: 'center center',
+              transition: isPanning ? 'none' : 'transform 0.1s ease',
+              cursor: isZoomMode ? (isPanning ? 'grabbing' : 'grab') : 'default'
+            }} 
+          />
+        ) : (
+          <video 
+            ref={videoRef}
+            autoPlay 
+            playsInline 
+            muted={isMuted} 
+            style={{ 
+              width: '100%', 
+              height: '100%', 
+              objectFit: 'cover',
+              transform: isZoomMode ? `scale(${zoomScale}) translate(${zoomOffset.x}px, ${zoomOffset.y}px)` : 'none',
+              transformOrigin: 'center center',
+              transition: isPanning ? 'none' : 'transform 0.1s ease',
+              cursor: isZoomMode ? (isPanning ? 'grabbing' : 'grab') : 'default'
+            }} 
+          />
+        )
       ) : (
         <div style={{
           position: 'absolute',
