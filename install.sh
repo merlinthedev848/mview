@@ -165,8 +165,17 @@ echo -e "\n\033[1;33m[6/6] Starting services...\033[0m"
 # Start infrastructure first and wait for healthy state
 "${COMPOSE[@]}" up -d postgres redis mqtt go2rtc
 echo "Waiting for database to be ready..."
+POSTGRES_WAIT_SECONDS=0
 until "${COMPOSE[@]}" exec -T postgres pg_isready -U "$POSTGRES_USER_VALUE" -d "$POSTGRES_DB_VALUE" &>/dev/null; do
     printf '.'
+    POSTGRES_WAIT_SECONDS=$((POSTGRES_WAIT_SECONDS + 2))
+    if [ "$POSTGRES_WAIT_SECONDS" -ge 240 ]; then
+        echo ""
+        echo "ERROR: PostgreSQL did not become ready after ${POSTGRES_WAIT_SECONDS}s."
+        echo "Recent PostgreSQL logs:"
+        "${COMPOSE[@]}" logs --tail=120 postgres || true
+        exit 1
+    fi
     sleep 2
 done
 echo ""

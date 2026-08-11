@@ -99,8 +99,8 @@ services:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER:-sentinel}\" -d \"$${POSTGRES_DB:-sentinelnvr}\""]
       interval: 5s
       timeout: 5s
-      retries: 10
-      start_period: 10s
+      retries: 48
+      start_period: 30s
 
   redis:
     image: redis:8.2-alpine
