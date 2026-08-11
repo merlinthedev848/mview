@@ -88,7 +88,6 @@ const CameraFeedComponent: React.FC<{
   const [useMjpegFallback, setUseMjpegFallback] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [connected, setConnected] = useState(false);
-  const [useMjpegFallback, setUseMjpegFallback] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
   const [showPTZ, setShowPTZ] = useState(false);
   const streamName = maximized ? `${cam.id}_main` : cam.rtsp_url_sub ? `${cam.id}_sub` : cam.id;

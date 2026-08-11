@@ -24,7 +24,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
   const [zoomOffset, setZoomOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
-  const [useMjpegFallback, setUseMjpegFallback] = useState(false);
 
   const panStart = useRef({ x: 0, y: 0 });
   const micStreamRef = useRef<MediaStream | null>(null);
