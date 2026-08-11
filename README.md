@@ -27,6 +27,23 @@ The installer will automatically:
 
 ---
 
+## Docker Compose
+
+Use Docker Compose v2:
+
+```bash
+docker compose up -d --build
+```
+
+Do not use the legacy `docker-compose` v1 binary. If you see `KeyError: 'ContainerConfig'`, recover with:
+
+```bash
+docker compose down --remove-orphans
+docker compose up -d --build
+```
+
+---
+
 ## ✨ Killer Features
 
 - 🧠 **Semantic Search:** Find clips using natural language (e.g., *"Person in a red jacket"*).

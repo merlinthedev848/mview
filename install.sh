@@ -62,6 +62,22 @@ if ! docker compose version &> /dev/null; then
     apt-get update -yq && apt-get install -yq docker-compose-plugin
 fi
 
+if ! docker compose version &> /dev/null; then
+    echo "ERROR: Docker Compose v2 is required. Install the docker-compose-plugin package and rerun this installer."
+    exit 1
+fi
+
+COMPOSE=(docker compose)
+
+if command -v docker-compose &> /dev/null; then
+    LEGACY_COMPOSE_VERSION="$(docker-compose version --short 2>/dev/null || true)"
+    if [ -n "$LEGACY_COMPOSE_VERSION" ]; then
+        echo "Note: legacy docker-compose v${LEGACY_COMPOSE_VERSION} is installed, but this installer will use Docker Compose v2 via 'docker compose'."
+        echo "If you previously ran 'docker-compose up' and saw KeyError: ContainerConfig, run:"
+        echo "  docker compose down --remove-orphans && docker compose up -d --build"
+    fi
+fi
+
 # ── 2. Clone / pull latest code ────────────────────────────────────
 echo -e "\n\033[1;33m[2/6] Fetching latest code from GitHub...\033[0m"
 INSTALL_DIR="/opt/mview-sentinel"
@@ -141,15 +157,15 @@ chmod -R 755 /opt/sentinel
 
 # ── 5. Build images ─────────────────────────────────────────────────
 echo -e "\n\033[1;33m[5/6] Building Docker images (uses cached layers — fast!)...\033[0m"
-DOCKER_BUILDKIT=1 docker compose build --parallel
+DOCKER_BUILDKIT=1 "${COMPOSE[@]}" build --parallel
 
 # ── 6. Start services in correct order ─────────────────────────────
 echo -e "\n\033[1;33m[6/6] Starting services...\033[0m"
 
 # Start infrastructure first and wait for healthy state
-docker compose up -d postgres redis mqtt go2rtc
+"${COMPOSE[@]}" up -d postgres redis mqtt go2rtc
 echo "Waiting for database to be ready..."
-until docker compose exec -T postgres pg_isready -U "$POSTGRES_USER_VALUE" -d "$POSTGRES_DB_VALUE" &>/dev/null; do
+until "${COMPOSE[@]}" exec -T postgres pg_isready -U "$POSTGRES_USER_VALUE" -d "$POSTGRES_DB_VALUE" &>/dev/null; do
     printf '.'
     sleep 2
 done
@@ -157,7 +173,7 @@ echo ""
 echo -e "\033[1;32m✓ PostgreSQL is ready.\033[0m"
 
 # Now start the application services
-docker compose up -d
+"${COMPOSE[@]}" up -d
 
 echo -e "\n\033[1;32m=============================================================\033[0m"
 echo -e "\033[1;32m  mView Sentinel is running! 🚀\033[0m"
