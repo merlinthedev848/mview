@@ -42,6 +42,12 @@ services:
         condition: service_healthy
       mqtt:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/system/health', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
     restart: unless-stopped
 
   detector:
@@ -67,8 +73,12 @@ services:
       - EVENT_COOLDOWN_SECONDS=5
       - DETECT_CLASSES=0,2,3,5,7
     depends_on:
-      - mqtt
-      - go2rtc
+      api:
+        condition: service_healthy
+      mqtt:
+        condition: service_started
+      go2rtc:
+        condition: service_started
     restart: unless-stopped
 
   postgres:
