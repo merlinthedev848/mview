@@ -36,16 +36,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
     let rtcTimeout: number | undefined;
 
     const fallbackToHls = () => {
-      sessionStorage.setItem('webrtc_failed', 'true');
       setUseMjpegFallback(true);
       setIsStreaming(true);
     };
-
-    const webrtcFailed = sessionStorage.getItem('webrtc_failed') === 'true';
-    if (webrtcFailed) {
-      fallbackToHls();
-      return;
-    }
 
     pc = new RTCPeerConnection({
       iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]

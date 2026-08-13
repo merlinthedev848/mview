@@ -114,16 +114,9 @@ const CameraFeedComponent: React.FC<{
     setConnected(false);
 
     const fallbackToHls = () => {
-      sessionStorage.setItem('webrtc_failed', 'true');
       setUseMjpegFallback(true);
       setConnected(true);
     };
-
-    const webrtcFailed = sessionStorage.getItem('webrtc_failed') === 'true';
-    if (webrtcFailed) {
-      fallbackToHls();
-      return;
-    }
 
     pc = new RTCPeerConnection({ iceServers });
 
