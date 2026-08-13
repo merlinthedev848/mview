@@ -219,6 +219,36 @@ app.include_router(agent.router)
 app.include_router(automations.router)
 
 
+@app.api_route("/go2rtc/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"])
+async def proxy_go2rtc(request: Request, path: str = ""):
+    """Proxy go2rtc API & WebRTC signaling directly through the main API port."""
+    import httpx
+    target_base = settings.go2rtc_url.rstrip("/")
+    subpath = path if path.startswith("api/") or not path else f"api/{path}"
+    target_url = f"{target_base}/{subpath}"
+    if request.url.query:
+        target_url = f"{target_url}?{request.url.query}"
+
+    body = await request.body()
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in ("host", "content-length")}
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=headers,
+                content=body,
+            )
+            return StreamingResponse(
+                resp.aiter_bytes(),
+                status_code=resp.status_code,
+                headers={k: v for k, v in resp.headers.items() if k.lower() not in ("content-length", "content-encoding", "transfer-encoding")}
+            )
+    except Exception as e:
+        raise HTTPException(502, f"go2rtc proxy error: {e}")
+
+
 @app.get("/system/health")
 async def health():
     dist = Path(__file__).parent.parent / "web" / "dist"

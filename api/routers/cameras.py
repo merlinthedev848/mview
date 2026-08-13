@@ -73,8 +73,19 @@ async def delete_camera(camera_id: str, db: AsyncSession = Depends(get_db)):
     cam = result.scalar_one_or_none()
     if not cam:
         raise HTTPException(404, "Camera not found")
+    
+    # Cascade delete associated events to avoid foreign key violations
+    from sqlalchemy import delete
+    from api.models.ai import SemanticEvent
+    await db.execute(delete(SemanticEvent).where(SemanticEvent.camera_id == camera_id))
+
+    # Delete camera record
     await db.delete(cam)
     await db.commit()
+
+    # Purge video recording files and stop active streams
+    from api.services.recorder import purge_all_recordings
+    await asyncio.to_thread(purge_all_recordings, camera_id)
     await _refresh_recorder(db)
     return {"status": "deleted"}
 

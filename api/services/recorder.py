@@ -432,21 +432,32 @@ def purge_all_recordings(camera_id: str | None = None) -> dict:
     purged_count = 0
     purged_bytes = 0
 
-    if not RECORDINGS_BASE.exists():
-        return {"deleted_files": 0, "deleted_gb": 0.0}
+    possible_bases = [
+        RECORDINGS_BASE,
+        Path(settings.recordings_dir).resolve(),
+        Path("./recordings").resolve(),
+        Path(settings.storage_path) / "recordings",
+    ]
 
-    camera_dirs = [RECORDINGS_BASE / camera_id] if camera_id else list(RECORDINGS_BASE.iterdir())
-    for cam_dir in camera_dirs:
-        if not cam_dir.is_dir():
+    seen_files = set()
+    for base in possible_bases:
+        if not base.exists():
             continue
-        for f in cam_dir.glob("*.mp4"):
-            try:
-                file_size = f.stat().st_size
-                f.unlink()
-                purged_count += 1
-                purged_bytes += file_size
-            except Exception as e:
-                logger.error(f"Error purging recording {f}: {e}")
+        camera_dirs = [base / camera_id] if camera_id else [d for d in base.iterdir() if d.is_dir()]
+        for cam_dir in camera_dirs:
+            if not cam_dir.exists() or not cam_dir.is_dir():
+                continue
+            for f in cam_dir.glob("*.mp4"):
+                if f in seen_files:
+                    continue
+                seen_files.add(f)
+                try:
+                    file_size = f.stat().st_size
+                    f.unlink()
+                    purged_count += 1
+                    purged_bytes += file_size
+                except Exception as e:
+                    logger.error(f"Error purging recording {f}: {e}")
 
     target = camera_id or "all cameras"
     logger.warning(f"Manual recording purge for {target} deleted {purged_count} files ({round(purged_bytes / 1_073_741_824, 2)} GB)")

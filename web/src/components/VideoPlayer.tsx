@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Camera, Maximize, Mic, Video as VideoIcon, Activity, Focus, Volume2, VolumeX } from 'lucide-react';
-import { go2rtcUrl } from '../lib/endpoints';
+import { go2rtcUrl, apiUrl } from '../lib/endpoints';
 
 interface VideoPlayerProps {
   cameraId: string;
@@ -256,7 +256,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
         useMjpegFallback ? (
           <img 
             src={go2rtcUrl(`/api/stream.mjpeg?src=${cameraId}`)}
-            alt="MJPEG Fallback"
+            alt="Camera Feed"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src = apiUrl(`/cameras/${cameraId}/snapshot?t=${Date.now()}`);
+            }}
             style={{ 
               width: '100%', 
               height: '100%', 

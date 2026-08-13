@@ -17,11 +17,7 @@ export const apiUrl = (path: string) => joinUrl(apiBase(), path);
 export const go2rtcBase = () => {
   const override = localStorage.getItem('mview_go2rtc_base');
   if (override) return override;
-
-  if (window.location.protocol === 'https:') {
-    return `${window.location.origin}/go2rtc`;
-  }
-  return `http://${window.location.hostname}:1984`;
+  return apiUrl('/go2rtc');
 };
 
 export const go2rtcUrl = (path: string) => joinUrl(go2rtcBase(), path);
