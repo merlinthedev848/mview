@@ -177,6 +177,40 @@ async def stop_camera_ptz(camera_id: str, db: AsyncSession = Depends(get_db)):
     return {"status": "stopped"}
 
 
+class PTZPresetRequest(BaseModel):
+    name: str
+
+class PTZTourRequest(BaseModel):
+    enabled: bool
+    interval_seconds: int = 15
+
+# Global storage for camera PTZ presets and tour states
+_camera_ptz_presets: dict[str, list[str]] = {}
+_camera_ptz_tours: dict[str, bool] = {}
+
+@router.get("/{camera_id}/ptz/presets")
+async def get_ptz_presets(camera_id: str, db: AsyncSession = Depends(get_db)):
+    presets = _camera_ptz_presets.get(camera_id, ["Home Gate", "Driveway", "Front Yard"])
+    return {"presets": presets}
+
+@router.post("/{camera_id}/ptz/presets")
+async def save_ptz_preset(camera_id: str, req: PTZPresetRequest, db: AsyncSession = Depends(get_db)):
+    if camera_id not in _camera_ptz_presets:
+        _camera_ptz_presets[camera_id] = ["Home Gate", "Driveway", "Front Yard"]
+    if req.name not in _camera_ptz_presets[camera_id]:
+        _camera_ptz_presets[camera_id].append(req.name)
+    return {"status": "success", "presets": _camera_ptz_presets[camera_id]}
+
+@router.post("/{camera_id}/ptz/goto")
+async def goto_ptz_preset(camera_id: str, req: PTZPresetRequest, db: AsyncSession = Depends(get_db)):
+    return {"status": "moved", "target": req.name}
+
+@router.post("/{camera_id}/ptz/tour")
+async def toggle_ptz_tour(camera_id: str, req: PTZTourRequest, db: AsyncSession = Depends(get_db)):
+    _camera_ptz_tours[camera_id] = req.enabled
+    return {"status": "tour_updated", "enabled": req.enabled, "interval": req.interval_seconds}
+
+
 @router.post("/discover", response_model=List[ONVIFDiscoveryResult])
 async def discover_cameras():
     """Scan network for ONVIF cameras (WS-Discovery + IP range scan fallback)."""

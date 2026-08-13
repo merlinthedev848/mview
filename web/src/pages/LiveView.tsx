@@ -27,6 +27,7 @@ interface Camera {
   location?: string;
   has_motion?: boolean;
   onvif_endpoint?: string;
+  config?: any;
 }
 
 interface CameraEvent {
@@ -315,6 +316,18 @@ const CameraFeedComponent: React.FC<{
       onMouseLeave={handleZoomMouseUp}
       style={{ overflow: 'hidden', position: 'relative' }}
     >
+      {/* SVG Privacy Mask Overlay */}
+      {cam.config?.privacy_masks && Array.isArray(cam.config.privacy_masks) && cam.config.privacy_masks.length > 0 && (
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 8 }}>
+          {cam.config.privacy_masks.map((mask: any, idx: number) => (
+            <polygon
+              key={idx}
+              points={mask.points?.map((p: any) => `${p.x * 100},${p.y * 100}`).join(' ')}
+              fill="rgba(0, 0, 0, 0.96)"
+            />
+          ))}
+        </svg>
+      )}
       <div className="cam-top">
         <div>
           <div className="cam-name">{cam.name}</div>
@@ -477,6 +490,8 @@ const LiveView: React.FC = () => {
   const [recordings, setRecordings] = useState<Record<string, RecordingFile[]>>({});
   const [layout, setLayout] = useState<1 | 4 | 9>(4);
   const [maximizedId, setMaximizedId] = useState<string | null>(null);
+  const [patrolMode, setPatrolMode] = useState(false);
+  const [patrolOffset, setPatrolOffset] = useState<number>(0);
   const [now, setNow] = useState(new Date());
   const [iceServers, setIceServers] = useState<RTCIceServer[]>([]);
   const [livePaused, setLivePaused] = useState(false);
@@ -536,7 +551,24 @@ const LiveView: React.FC = () => {
     })();
   }, [cameras.map(c => c.id).join('|')]);
 
-  const visibleCameras = maximizedId ? cameras.filter(c => c.id === maximizedId) : cameras.slice(0, layout);
+  useEffect(() => {
+    if (!patrolMode || cameras.length === 0) return;
+    const t = setInterval(() => {
+      setPatrolOffset(prev => (prev + 1) % cameras.length);
+    }, 8000);
+    return () => clearInterval(t);
+  }, [patrolMode, cameras.length]);
+
+  const visibleCameras = useMemo(() => {
+    if (maximizedId) return cameras.filter(c => c.id === maximizedId);
+    if (!patrolMode) return cameras.slice(0, layout);
+    const rotated = [];
+    for (let i = 0; i < layout; i++) {
+      rotated.push(cameras[(patrolOffset + i) % cameras.length]);
+    }
+    return rotated.filter(Boolean);
+  }, [cameras, maximizedId, layout, patrolMode, patrolOffset]);
+
   const onlineCams = cameras.filter(c => c.status !== 'offline').length;
   const gridClass = maximizedId || layout === 1 ? 'g1' : layout === 4 ? 'g4' : 'g9';
   const syncSpan = 6 * 3600 * 1000;
@@ -623,6 +655,14 @@ const LiveView: React.FC = () => {
             <ExternalLink size={14} />
           </button>
           <div className="layout-toggle">
+            <button 
+              className={`layout-btn${patrolMode ? ' active' : ''}`} 
+              title="Automated Patrol Mode (Rotate Feeds)"
+              onClick={() => setPatrolMode(p => !p)}
+              style={{ color: patrolMode ? 'var(--cyan)' : 'inherit', fontSize: '0.7rem', display: 'flex', gap: 4, alignItems: 'center', padding: '0 8px' }}
+            >
+              <Activity size={12} /> Patrol
+            </button>
             {([1, 4, 9] as const).map(n => (
               <button key={n} className={`layout-btn${layout === n && !maximizedId ? ' active' : ''}`} onClick={() => { setMaximizedId(null); setLayout(n); }}>
                 <GridIcon n={n} />

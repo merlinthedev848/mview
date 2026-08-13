@@ -11,7 +11,7 @@ from pathlib import Path
 from api.database import engine, Base
 from api.models.user import User
 from api.models import operations as operations_models  # noqa: F401 - registers SQLAlchemy tables
-from api.routers import cameras, recordings, events, system, auth, users, maps, operations, agent
+from api.routers import cameras, recordings, events, system, auth, users, maps, operations, agent, automations
 from api.services.recorder import recorder_manager
 from api.services.local_core import local_snapshot_worker
 from api.config import settings
@@ -216,6 +216,7 @@ app.include_router(users.router)
 app.include_router(maps.router)
 app.include_router(operations.router)
 app.include_router(agent.router)
+app.include_router(automations.router)
 
 
 @app.get("/system/health")

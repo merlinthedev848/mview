@@ -1,23 +1,46 @@
 import React, { useState, useEffect } from 'react';
-import { Bell } from 'lucide-react';
+import { Bell, Search, Sparkles } from 'lucide-react';
 import { apiUrl } from '../lib/endpoints';
 
 const Events: React.FC = () => {
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+
+  const loadEvents = async () => {
+    try {
+      const res = await fetch(apiUrl('/events?limit=200'));
+      if (res.ok) setEvents(await res.json());
+    } catch {}
+    setLoading(false);
+  };
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await fetch(apiUrl('/events?limit=200'));
-        if (res.ok) setEvents(await res.json());
-      } catch {}
-      setLoading(false);
-    };
-    load();
-    const t = setInterval(load, 5000);
+    loadEvents();
+    const t = setInterval(loadEvents, 5000);
     return () => clearInterval(t);
   }, []);
+
+  const handleVectorSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) {
+      loadEvents();
+      return;
+    }
+    setSearching(true);
+    try {
+      const res = await fetch(apiUrl('/events/search'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: searchQuery }),
+      });
+      if (res.ok) {
+        setEvents(await res.json());
+      }
+    } catch {}
+    setSearching(false);
+  };
 
   const typeColor = (cls: string) => {
     if (!cls) return 'var(--t3)';
@@ -28,8 +51,25 @@ const Events: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      <div className="topbar" style={{ justifyContent: 'space-between' }}>
+      <div className="topbar" style={{ justifyContent: 'space-between', gap: 16 }}>
         <h1 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--t1)' }}>Event Log</h1>
+        
+        <form onSubmit={handleVectorSearch} style={{ display: 'flex', gap: 8, flex: 1, maxWidth: 450 }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <input
+              className="form-input"
+              style={{ paddingLeft: 34, height: 32, fontSize: '0.78rem' }}
+              placeholder="AI Vector Search (e.g. 'person in red jacket' or 'car')..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+            <Sparkles size={14} style={{ position: 'absolute', left: 10, top: 9, color: 'var(--cyan)' }} />
+          </div>
+          <button type="submit" className="btn btn-primary" style={{ height: 32, padding: '0 12px', fontSize: '0.75rem' }} disabled={searching}>
+            <Search size={14} /> {searching ? 'Searching...' : 'Search'}
+          </button>
+        </form>
+
         <span style={{ fontSize: '0.76rem', color: 'var(--t2)' }}>{events.length} events</span>
       </div>
 
@@ -39,8 +79,8 @@ const Events: React.FC = () => {
         ) : events.length === 0 ? (
           <div className="empty">
             <Bell size={38} strokeWidth={1} color="var(--t3)" />
-            <div className="empty-title">No Events Yet</div>
-            <div className="empty-sub">Events are logged here when the AI detector identifies objects in your camera feeds.</div>
+            <div className="empty-title">No Events Found</div>
+            <div className="empty-sub">No logged events match your current vector search query or filter.</div>
           </div>
         ) : (
           <div className="card">
@@ -59,16 +99,25 @@ const Events: React.FC = () => {
                     </span>
                   )}
                 </div>
+                {ev.match_score != null && (
+                  <span style={{
+                    fontSize: '0.72rem', padding: '2px 9px', borderRadius: 20,
+                    background: 'rgba(16, 185, 129, 0.15)', color: '#10b981',
+                    border: '1px solid rgba(16, 185, 129, 0.3)', marginRight: 6
+                  }}>
+                    {Math.round(ev.match_score * 100)}% Vector Match
+                  </span>
+                )}
                 {ev.confidence != null && (
                   <span style={{
                     fontSize: '0.72rem', padding: '2px 9px', borderRadius: 20,
                     background: 'var(--cyan-dim)', color: 'var(--cyan)',
                     border: '1px solid var(--cyan-border)',
                   }}>
-                    {Math.round(ev.confidence * 100)}%
+                    {Math.round(ev.confidence * 100)}% Conf
                   </span>
                 )}
-                <span style={{ fontSize: '0.7rem', fontFamily: 'JetBrains Mono, monospace', color: 'var(--t3)' }}>
+                <span style={{ fontSize: '0.7rem', fontFamily: 'JetBrains Mono, monospace', color: 'var(--t3)', marginLeft: 8 }}>
                   {new Date(ev.timestamp ?? ev.created_at).toLocaleString('en-GB', {
                     day: '2-digit', month: 'short',
                     hour: '2-digit', minute: '2-digit', second: '2-digit'

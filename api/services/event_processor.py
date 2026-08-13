@@ -160,6 +160,11 @@ async def process_mqtt_events():
                                 detected_classes = [obj.get("class", "object") for obj in objects]
                                 try:
                                     snapshot_bytes = await capture_snapshot(rtsp_url)
+                                    if not snapshot_bytes:
+                                        logger.warning(f"[WATCHDOG Alert] Signal loss detected on camera {camera_id}")
+                                    elif len(snapshot_bytes) < 300:
+                                        logger.warning(f"[WATCHDOG Alert] Camera tampering / lens obstruction detected on camera {camera_id}")
+                                    
                                     if snapshot_bytes:
                                         from api.services.vlm_service import vlm_service
                                         vlm_result = await vlm_service.analyze_frame(snapshot_bytes, detected_classes)

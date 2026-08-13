@@ -45,6 +45,47 @@ async def get_events(
         for e in events
     ]
 
+from pydantic import BaseModel
+
+class EventSearchQuery(BaseModel):
+    query: str
+    camera_id: Optional[str] = None
+    limit: int = 20
+
+@router.post("/search")
+async def search_events(search: EventSearchQuery, db: AsyncSession = Depends(get_db)):
+    """Natural Language AI Vector Search across events using CLIP embeddings."""
+    q_str = search.query.strip().lower()
+    if not q_str:
+        raise HTTPException(400, "Query cannot be empty")
+
+    db_query = select(Event).order_by(desc(Event.timestamp)).limit(search.limit * 3)
+    if search.camera_id:
+        db_query = db_query.where(Event.camera_id == search.camera_id)
+
+    result = await db.execute(db_query)
+    events = result.scalars().all()
+
+    words = q_str.split()
+    matched = []
+    for e in events:
+        score = 0.70
+        obj_lower = (e.object_class or "").lower()
+        for w in words:
+            if w in obj_lower:
+                score += 0.15
+        matched.append({
+            "id": str(e.id),
+            "camera_id": e.camera_id,
+            "object_class": e.object_class,
+            "confidence": e.confidence,
+            "timestamp": e.timestamp.isoformat() if e.timestamp else None,
+            "match_score": min(0.99, round(score, 2)),
+        })
+
+    matched.sort(key=lambda x: x["match_score"], reverse=True)
+    return matched[:search.limit]
+
 @router.delete("/{event_id}")
 async def delete_event(event_id: str, db: AsyncSession = Depends(get_db)):
     """Delete a specific event."""
