@@ -156,14 +156,27 @@ class CameraRecorder:
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
-            stdout=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
         )
 
-        _, stderr = await proc.communicate()
+        # Read stderr continuously to prevent pipe buffer saturation deadlock
+        stderr_lines = []
+        while True:
+            line = await proc.stderr.readline()
+            if not line:
+                break
+            decoded = line.decode(errors="replace").strip()
+            if decoded:
+                logger.debug(f"[{self.camera_name}] ffmpeg: {decoded}")
+                stderr_lines.append(decoded)
+                if len(stderr_lines) > 50:
+                    stderr_lines.pop(0)
+
+        await proc.wait()
 
         if proc.returncode not in (0, 255):  # 255 = SIGTERM (normal stop)
-            err = stderr.decode(errors="replace") if stderr else "unknown"
+            err = "\n".join(stderr_lines) if stderr_lines else "unknown"
             raise RuntimeError(f"ffmpeg exited {proc.returncode}: {err[-300:]}")
 
         logger.info(f"[{self.camera_name}] ffmpeg segment completed normally.")

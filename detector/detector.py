@@ -131,6 +131,8 @@ class DetectorNode:
                 self.publish_event(detections, frame_w, frame_h)
 
         cap.release()
+        logger.info("Stream connection lost or ended. Reconnecting in 5s...")
+        time.sleep(5)
 
     def publish_event(self, detections, frame_w, frame_h):
         now = time.time()

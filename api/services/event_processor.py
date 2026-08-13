@@ -24,6 +24,7 @@ async def capture_snapshot(rtsp_url: str) -> bytes | None:
         "-vcodec", "mjpeg",
         "-",
     ]
+    proc = None
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -34,7 +35,12 @@ async def capture_snapshot(rtsp_url: str) -> bytes | None:
         if proc.returncode == 0 and stdout:
             return stdout
     except Exception:
-        pass
+        if proc:
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
     return None
 
 MQTT_BROKER = settings.mqtt_broker

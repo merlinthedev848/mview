@@ -34,6 +34,9 @@ class AIConfig(BaseModel):
     min_confidence: float = Field(default=0.65, ge=0, le=1)
     enable_alpr: bool = False
     enable_face_recognition: bool = False
+    ai_provider: str = "local"
+    gemini_api_key: str = ""
+    openai_api_key: str = ""
 
 
 class NetworkConfig(BaseModel):
@@ -87,6 +90,9 @@ def _compose_config(data: dict) -> SystemConfigUpdate:
             min_confidence=ai.get("min_confidence", 0.65),
             enable_alpr=ai.get("enable_alpr", False),
             enable_face_recognition=ai.get("enable_face_recognition", False),
+            ai_provider=ai.get("ai_provider", settings.ai_provider),
+            gemini_api_key=ai.get("gemini_api_key", settings.gemini_api_key),
+            openai_api_key=ai.get("openai_api_key", settings.openai_api_key),
         ),
         network=NetworkConfig(
             api_port=network.get("api_port", 8000),
@@ -433,9 +439,13 @@ async def update_system_config(config: SystemConfigUpdate):
         
     settings.retention_days = config.retention_days
     for key, value in config.ai.model_dump().items():
-        setting_name = f"ai_{key}"
-        if hasattr(settings, setting_name):
-            setattr(settings, setting_name, value)
+        if key in ("ai_provider", "gemini_api_key", "openai_api_key"):
+            if hasattr(settings, key):
+                setattr(settings, key, value)
+        else:
+            setting_name = f"ai_{key}"
+            if hasattr(settings, setting_name):
+                setattr(settings, setting_name, value)
     for key, value in config.network.model_dump().items():
         setting_name = f"network_{key}"
         if hasattr(settings, setting_name):

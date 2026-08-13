@@ -114,6 +114,9 @@ interface SystemConfig {
     min_confidence: number;
     enable_alpr: boolean;
     enable_face_recognition: boolean;
+    ai_provider: string;
+    gemini_api_key: string;
+    openai_api_key: string;
   };
   network: {
     api_port: number;
@@ -191,6 +194,9 @@ const defaultSystemConfig: SystemConfig = {
     min_confidence: 0.65,
     enable_alpr: false,
     enable_face_recognition: false,
+    ai_provider: 'local',
+    gemini_api_key: '',
+    openai_api_key: '',
   },
   network: {
     api_port: 8000,
@@ -1228,7 +1234,7 @@ const Settings: React.FC = () => {
             </>
           )}
 
-          {tab === 'ai' && (
+          {tab === 'ai' && (<>
             <div className="card">
               <div className="card-head">
                 <span className="card-title">AI Pipeline Configuration</span>
@@ -1327,7 +1333,68 @@ const Settings: React.FC = () => {
                 </button>
               </div>
             </div>
-          )}
+
+            <div className="card" style={{ marginTop: 24 }}>
+              <div className="card-head">
+                <span className="card-title">Sentinel Active AI Operator Settings</span>
+              </div>
+              <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 20 }}>
+                  <div className="form-group">
+                    <label className="form-label">Active AI Provider</label>
+                    <select
+                      className="form-select"
+                      value={systemConfig.ai.ai_provider || 'local'}
+                      onChange={e => setSystemConfig(c => ({ ...c, ai: { ...c.ai, ai_provider: e.target.value } }))}
+                    >
+                      <option value="local">Local Rule-Based (No API Keys needed)</option>
+                      <option value="gemini">Google Gemini VLM (Gemini 1.5 Flash)</option>
+                      <option value="openai">OpenAI GPT VLM (GPT-4o mini)</option>
+                    </select>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: 4 }}>
+                      Select the LLM/VLM backend used to run advanced visual description summaries and function tool-calling commands.
+                    </div>
+                  </div>
+
+                  {systemConfig.ai.ai_provider === 'gemini' && (
+                    <div className="form-group">
+                      <label className="form-label">Gemini API Key</label>
+                      <div style={{ position: 'relative' }}>
+                        <input
+                          className="form-input"
+                          type="password"
+                          value={systemConfig.ai.gemini_api_key || ''}
+                          onChange={e => setSystemConfig(c => ({ ...c, ai: { ...c.ai, gemini_api_key: e.target.value } }))}
+                          placeholder="AIzaSy..."
+                        />
+                        <KeyRound size={14} style={{ position: 'absolute', right: 12, top: 12, color: 'var(--text-3)' }} />
+                      </div>
+                    </div>
+                  )}
+
+                  {systemConfig.ai.ai_provider === 'openai' && (
+                    <div className="form-group">
+                      <label className="form-label">OpenAI API Key</label>
+                      <div style={{ position: 'relative' }}>
+                        <input
+                          className="form-input"
+                          type="password"
+                          value={systemConfig.ai.openai_api_key || ''}
+                          onChange={e => setSystemConfig(c => ({ ...c, ai: { ...c.ai, openai_api_key: e.target.value } }))}
+                          placeholder="sk-proj-..."
+                        />
+                        <KeyRound size={14} style={{ position: 'absolute', right: 12, top: 12, color: 'var(--text-3)' }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <button className="btn btn-primary" style={{ width: 'fit-content' }} onClick={() => saveSystemConfig()} disabled={savingConfig}>
+                  <CheckCircle size={15}/> {savingConfig ? 'Saving...' : 'Apply Operator Settings'}
+                </button>
+              </div>
+            </div>
+          </>)}
 
           {tab === 'network' && (
             <div className="card">

@@ -101,6 +101,7 @@ async def get_camera_snapshot(camera_id: str, db: AsyncSession = Depends(get_db)
         "-vcodec", "mjpeg",
         "-",
     ]
+    proc = None
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -109,11 +110,23 @@ async def get_camera_snapshot(camera_id: str, db: AsyncSession = Depends(get_db)
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=8.0)
     except asyncio.TimeoutError:
-        if "proc" in locals():
-            proc.kill()
+        if proc:
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
         raise HTTPException(504, "Snapshot timed out")
     except FileNotFoundError:
         raise HTTPException(500, "ffmpeg is not available in the API container")
+    except Exception as e:
+        if proc:
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
+        raise HTTPException(500, f"Snapshot failed: {e}")
 
     if proc.returncode != 0 or not stdout:
         detail = stderr.decode(errors="replace")[-240:] if stderr else "Snapshot capture failed"
