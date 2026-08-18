@@ -60,9 +60,11 @@ const WallboardCell: React.FC<{ cam: Camera; iceServers: RTCIceServer[] }> = ({ 
         <>
           <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           {!connected && (
-            <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#7ea6d6' }}>
-              Connecting...
-            </div>
+            <img 
+              src={apiUrl(`/cameras/${cam.id}/snapshot?t=${Date.now()}`)} 
+              alt={cam.name} 
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} 
+            />
           )}
         </>
       )}
