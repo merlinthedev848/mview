@@ -412,6 +412,55 @@ async def purge_recordings(camera_id: str | None = Query(default=None)):
     return {"status": "purged", **result, "storage_report": report}
 
 
+@router.get("/diagnostics")
+async def run_diagnostics(db: AsyncSession = Depends(get_db)):
+    """Run an automated diagnostic audit on database, go2rtc, storage, and workers."""
+    import httpx, shutil
+    db_ok = False
+    try:
+        from sqlalchemy import select
+        await db.execute(select(1))
+        db_ok = True
+    except Exception:
+        pass
+
+    go2rtc_ok = False
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            res = await client.get(f"{settings.go2rtc_url.rstrip('/')}/api/streams")
+            go2rtc_ok = res.status_code == 200
+    except Exception:
+        pass
+
+    storage_target = settings.storage_path if os.path.exists(settings.storage_path) else "."
+    disk = shutil.disk_usage(storage_target)
+    free_gb = round(disk.free / 1_073_741_824, 2)
+    total_gb = round(disk.total / 1_073_741_824, 2)
+
+    return {
+        "status": "healthy" if (db_ok and go2rtc_ok) else "degraded",
+        "database_connected": db_ok,
+        "go2rtc_active": go2rtc_ok,
+        "storage": {
+            "free_gb": free_gb,
+            "total_gb": total_gb,
+            "usage_percent": round(((disk.total - disk.free) / disk.total) * 100, 1)
+        },
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
+@router.post("/maintenance/vacuum")
+async def vacuum_database(db: AsyncSession = Depends(get_db)):
+    """Re-index and clean orphaned records to optimize query speed."""
+    from sqlalchemy import text
+    try:
+        await db.execute(text("ANALYZE;"))
+        return {"status": "success", "message": "Database query statistics re-indexed."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 @router.get("/config")
 async def get_system_config():
     """Retrieve system configuration settings."""

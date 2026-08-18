@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Trash2, Edit2, Wifi, WifiOff, CheckCircle, XCircle, Loader, ChevronDown, ChevronRight, ShieldCheck, KeyRound } from 'lucide-react';
+import { Search, Plus, Trash2, Edit2, Wifi, WifiOff, CheckCircle, XCircle, Loader, ChevronDown, ChevronRight, ShieldCheck, KeyRound, Activity, Database } from 'lucide-react';
 import { apiUrl } from '../lib/endpoints';
 
 interface Camera {
@@ -488,6 +488,41 @@ const Settings: React.FC = () => {
       showToast('Network error while purging recordings.');
     }
     setPurgingRecordings(false);
+  };
+
+  const [runningDiag, setRunningDiag] = useState(false);
+  const [runningVac, setRunningVac] = useState(false);
+
+  const runDiagnostics = async () => {
+    setRunningDiag(true);
+    try {
+      const res = await fetch(apiUrl('/system/diagnostics'));
+      if (res.ok) {
+        const data = await res.json();
+        showToast(`Diagnostics: ${data.status.toUpperCase()} | DB: ${data.database_connected ? 'OK' : 'ERR'} | go2rtc: ${data.go2rtc_active ? 'OK' : 'ERR'} | Free Disk: ${data.storage.free_gb} GB`);
+      } else {
+        showToast('Diagnostics audit failed.');
+      }
+    } catch {
+      showToast('Network error running diagnostics.');
+    }
+    setRunningDiag(false);
+  };
+
+  const runVacuum = async () => {
+    setRunningVac(true);
+    try {
+      const res = await fetch(apiUrl('/system/maintenance/vacuum'), { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        showToast(data.message || 'Database query indexes optimized.');
+      } else {
+        showToast('Database maintenance failed.');
+      }
+    } catch {
+      showToast('Network error during database maintenance.');
+    }
+    setRunningVac(false);
   };
 
   const loadZoneSnapshot = async (cameraId: string) => {
@@ -1657,6 +1692,12 @@ const Settings: React.FC = () => {
                       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                         <button className="btn btn-danger" onClick={purgeRecordings} disabled={purgingRecordings}>
                           {purgingRecordings ? 'Purging...' : <><Trash2 size={14} /> Purge Recordings</>}
+                        </button>
+                        <button className="btn btn-ghost" onClick={runDiagnostics} disabled={runningDiag}>
+                          {runningDiag ? 'Checking...' : <><Activity size={14} /> Run Diagnostics</>}
+                        </button>
+                        <button className="btn btn-ghost" onClick={runVacuum} disabled={runningVac}>
+                          {runningVac ? 'Optimizing...' : <><Database size={14} /> Re-index DB</>}
                         </button>
                         <span style={{ color: 'var(--text-3)', fontSize: '0.72rem' }}>
                           Current archive: {storageReport ? `${storageReport.total_gb} GB` : 'loading...'}
