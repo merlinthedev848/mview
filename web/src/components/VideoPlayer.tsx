@@ -82,7 +82,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
-        const response = await fetch(go2rtcUrl(`/api/webrtc?src=${cameraId}`), {
+        const streamName = encodeURIComponent(cameraId);
+        const response = await fetch(go2rtcUrl(`/api/webrtc?src=${streamName}`), {
           method: 'POST',
           body: offer.sdp
         });
@@ -93,7 +94,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
             await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
           }
         } else {
-          console.warn("WebRTC offer rejected, falling back to HLS");
+          console.warn("WebRTC offer rejected, falling back to live stream");
           fallbackToHls();
         }
       } catch (err) {
@@ -102,13 +103,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
       }
     };
 
-    // Set a 2.5s connection timeout for WebRTC before failing over to HLS
+    // Set a fast 2.5s connection timeout for WebRTC before failing over to live stream
     rtcTimeout = window.setTimeout(() => {
       if (pc && pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed') {
-        console.warn(`WebRTC connection timed out after 6.0s for camera ${cameraId}. Falling back to HLS...`);
+        console.warn(`WebRTC connection timed out after 2.5s for camera ${cameraId}. Falling back to live stream...`);
         fallbackToHls();
       }
-    }, 6000);
+    }, 2500);
 
     startStream();
 
