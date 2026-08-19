@@ -467,16 +467,30 @@ const Settings: React.FC = () => {
     } catch {}
   };
 
+  const getAuthHeaders = (): Record<string, string> => {
+    const token = localStorage.getItem('mview_token');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+  };
+
   const purgeRecordings = async () => {
     const selectedCamera = purgeCameraId ? cameras.find(cam => cam.id === purgeCameraId) : null;
     const usage = selectedCamera ? `recordings for ${selectedCamera.name}` : (storageReport?.total_gb ? `${storageReport.total_gb} GB` : 'all stored video');
     if (!window.confirm(`Delete ${usage} of recordings? This cannot be undone.`)) return;
     setPurgingRecordings(true);
     try {
-      const query = purgeCameraId ? `?camera_id=${encodeURIComponent(purgeCameraId)}` : '';
-      let res = await fetch(apiUrl(`/system/recordings/purge${query}`), { method: 'POST' });
+      const token = localStorage.getItem('mview_token') || '';
+      const query = purgeCameraId 
+        ? `?camera_id=${encodeURIComponent(purgeCameraId)}&token=${encodeURIComponent(token)}`
+        : `?token=${encodeURIComponent(token)}`;
+      let res = await fetch(apiUrl(`/system/recordings/purge${query}`), { 
+        method: 'POST',
+        headers: { ...getAuthHeaders() }
+      });
       if (!res.ok) {
-        res = await fetch(apiUrl(`/system/purge-recordings${query}`), { method: 'POST' });
+        res = await fetch(apiUrl(`/system/purge-recordings${query}`), { 
+          method: 'POST',
+          headers: { ...getAuthHeaders() }
+        });
       }
       if (res.ok) {
         const data = await res.json();
@@ -499,7 +513,10 @@ const Settings: React.FC = () => {
   const runDiagnostics = async () => {
     setRunningDiag(true);
     try {
-      const res = await fetch(apiUrl('/system/diagnostics'));
+      const token = localStorage.getItem('mview_token') || '';
+      const res = await fetch(apiUrl(`/system/diagnostics?token=${encodeURIComponent(token)}`), {
+        headers: { ...getAuthHeaders() }
+      });
       if (res.ok) {
         const data = await res.json();
         showToast(`Diagnostics: ${data.status.toUpperCase()} | DB: ${data.database_connected ? 'OK' : 'ERR'} | go2rtc: ${data.go2rtc_active ? 'OK' : 'ERR'} | Free Disk: ${data.storage.free_gb} GB`);
@@ -515,7 +532,11 @@ const Settings: React.FC = () => {
   const runVacuum = async () => {
     setRunningVac(true);
     try {
-      const res = await fetch(apiUrl('/system/maintenance/vacuum'), { method: 'POST' });
+      const token = localStorage.getItem('mview_token') || '';
+      const res = await fetch(apiUrl(`/system/maintenance/vacuum?token=${encodeURIComponent(token)}`), { 
+        method: 'POST',
+        headers: { ...getAuthHeaders() }
+      });
       if (res.ok) {
         const data = await res.json();
         showToast(data.message || 'Database query indexes optimized.');

@@ -188,7 +188,7 @@ async def auth_middleware(request: Request, call_next):
         token = None
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.split(" ")[1]
-        elif path.startswith("/recordings/") or path == "/system/live" or is_snapshot:
+        elif path.startswith("/recordings/") or path.startswith("/system/") or is_snapshot:
             token = request.query_params.get("token")
 
         if not token:
