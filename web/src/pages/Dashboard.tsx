@@ -46,14 +46,16 @@ export const Dashboard = () => {
   const [events, setEvents] = useState<DashboardEvent[]>([]);
   const [storage, setStorage] = useState<{ total_gb: number; used_gb: number; usage_percent: number } | null>(null);
   const [stats, setStats] = useState({ total_cameras: 0, online_cameras: 0, events_today: 0 });
+  const [analytics, setAnalytics] = useState<{ total_events: number; hourly: { hour: string; count: number }[]; top_classes: { class: string; count: number }[] } | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [camRes, eventRes, healthRes] = await Promise.all([
+        const [camRes, eventRes, healthRes, analyticsRes] = await Promise.all([
           fetch(apiUrl('/cameras')),
           fetch(apiUrl('/events?limit=20')),
           fetch(apiUrl('/system/health')),
+          fetch(apiUrl('/events/analytics')),
         ]);
 
         if (camRes.ok) {
@@ -76,6 +78,11 @@ export const Dashboard = () => {
           const healthData = await healthRes.json();
           if (healthData.storage) setStorage(healthData.storage);
         }
+
+        if (analyticsRes.ok) {
+          const analyticsData = await analyticsRes.json();
+          setAnalytics(analyticsData);
+        }
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error);
       }
@@ -87,13 +94,16 @@ export const Dashboard = () => {
   }, []);
 
   const chartData = useMemo(() => {
+    if (analytics?.hourly && analytics.hourly.some(h => h.count > 0)) {
+      return analytics.hourly.map(h => ({ name: h.hour, count: h.count }));
+    }
     const buckets: Record<string, number> = {};
     for (const event of events) {
       const label = event.object_class || 'other';
       buckets[label] = (buckets[label] || 0) + 1;
     }
     return Object.entries(buckets).map(([name, count]) => ({ name, count }));
-  }, [events]);
+  }, [events, analytics]);
 
   const kpis = [
     {

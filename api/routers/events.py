@@ -86,6 +86,32 @@ async def search_events(search: EventSearchQuery, db: AsyncSession = Depends(get
     matched.sort(key=lambda x: x["match_score"], reverse=True)
     return matched[:search.limit]
 
+@router.get("/analytics")
+async def get_event_analytics(db: AsyncSession = Depends(get_db)):
+    """Retrieve hourly distribution & category breakdown for security intelligence charts."""
+    result = await db.execute(select(Event).order_by(desc(Event.timestamp)).limit(500))
+    events = result.scalars().all()
+
+    hourly = {f"{h:02d}:00": 0 for h in range(24)}
+    classes: dict[str, int] = {}
+    cameras: dict[str, int] = {}
+
+    for e in events:
+        if e.timestamp:
+            h_str = f"{e.timestamp.hour:02d}:00"
+            hourly[h_str] = hourly.get(h_str, 0) + 1
+        c_name = (e.object_class or "object").split(":")[0].split("@")[0].strip().capitalize()
+        classes[c_name] = classes.get(c_name, 0) + 1
+        cameras[e.camera_id] = cameras.get(e.camera_id, 0) + 1
+
+    return {
+        "total_events": len(events),
+        "hourly": [{"hour": k, "count": v} for k, v in hourly.items()],
+        "top_classes": [{"class": k, "count": v} for k, v in sorted(classes.items(), key=lambda x: x[1], reverse=True)[:5]],
+        "top_cameras": [{"camera_id": k, "count": v} for k, v in sorted(cameras.items(), key=lambda x: x[1], reverse=True)[:5]],
+    }
+
+
 @router.delete("/{event_id}")
 async def delete_event(event_id: str, db: AsyncSession = Depends(get_db)):
     """Delete a specific event."""
