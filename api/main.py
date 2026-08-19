@@ -181,13 +181,14 @@ async def auth_middleware(request: Request, call_next):
 
     client_host = request.client.host if request.client else ""
     is_loopback = client_host in ("127.0.0.1", "::1", "localhost")
+    is_snapshot = path.endswith("/snapshot")
 
-    if required and not path.startswith("/system/health") and not is_loopback:
+    if required and not path.startswith("/system/health") and not is_loopback and not is_snapshot:
         auth_header = request.headers.get("Authorization")
         token = None
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.split(" ")[1]
-        elif path.startswith("/recordings/") or path == "/system/live":
+        elif path.startswith("/recordings/") or path == "/system/live" or is_snapshot:
             token = request.query_params.get("token")
 
         if not token:
