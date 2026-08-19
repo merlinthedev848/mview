@@ -213,7 +213,13 @@ export const Dashboard = () => {
                 ) : (
                   events.map(event => (
                     <div key={event.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.025)' }}>
-                      <div className={`event-dot ${event.object_class === 'person' ? 'person' : event.object_class === 'car' ? 'vehicle' : 'other'}`} />
+                      <div style={{ width: 48, height: 48, borderRadius: 6, overflow: 'hidden', flexShrink: 0, border: '1px solid var(--border)' }}>
+                        <img 
+                          src={apiUrl(`/events/${event.id}/thumbnail`)} 
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                        />
+                      </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                           <strong style={{ color: 'var(--t1)', fontSize: '0.82rem', textTransform: 'capitalize' }}>{event.object_class || 'event'}</strong>

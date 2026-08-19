@@ -2,6 +2,8 @@ import asyncio
 import json
 import logging
 import os
+import uuid
+import aiofiles
 from aiomqtt import Client as MQTTClient
 from api.database import async_session_maker
 from api.models.ai import SemanticEvent
@@ -186,12 +188,22 @@ async def process_mqtt_events():
                                         continue
                                     _LAST_ZONE_EVENTS[cooldown_key] = event_time
 
+                                event_id = str(uuid.uuid4())
+                                thumb_path = None
+                                if 'snapshot_bytes' in locals() and snapshot_bytes:
+                                    os.makedirs(settings.thumbnail_path, exist_ok=True)
+                                    thumb_path = os.path.join(settings.thumbnail_path, f"{event_id}.jpg")
+                                    with open(thumb_path, "wb") as f:
+                                        f.write(snapshot_bytes)
+                                
                                 session.add(SemanticEvent(
+                                    id=event_id,
                                     camera_id=camera_id,
                                     embedding=embedding,
                                     object_class=object_class,
                                     confidence=obj.get("confidence"),
                                     timestamp=timestamp,
+                                    thumbnail_path=thumb_path
                                 ))
                                 saved_count += 1
                                 

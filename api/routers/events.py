@@ -45,6 +45,15 @@ async def get_events(
         for e in events
     ]
 
+from fastapi.responses import FileResponse
+
+@router.get("/{event_id}/thumbnail")
+async def get_event_thumbnail(event_id: str, db: AsyncSession = Depends(get_db)):
+    event = await db.get(Event, event_id)
+    if not event or not event.thumbnail_path or not __import__('os').path.exists(event.thumbnail_path):
+        raise HTTPException(status_code=404, detail="Thumbnail not found")
+    return FileResponse(event.thumbnail_path, media_type="image/jpeg")
+
 @router.delete("/{event_id}")
 async def delete_event(event_id: str, db: AsyncSession = Depends(get_db)):
     """Delete a specific event."""

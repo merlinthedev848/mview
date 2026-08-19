@@ -90,7 +90,7 @@ const CameraFeedComponent: React.FC<{
   const [connected, setConnected] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
   const [showPTZ, setShowPTZ] = useState(false);
-  const streamName = maximized ? `${cam.id}_main` : cam.rtsp_url_sub ? `${cam.id}_sub` : cam.id;
+  const streamName = cam.id;
 
   // Tools states
   const [isMuted, setIsMuted] = useState(true);
