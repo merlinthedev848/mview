@@ -86,10 +86,17 @@ async def search_events(search: EventSearchQuery, db: AsyncSession = Depends(get
     matched.sort(key=lambda x: x["match_score"], reverse=True)
     return matched[:search.limit]
 
+_ANALYTICS_CACHE = {"timestamp": 0.0, "data": None}
+
 @router.get("/analytics")
 async def get_event_analytics(db: AsyncSession = Depends(get_db)):
     """Retrieve hourly distribution & category breakdown for security intelligence charts."""
-    result = await db.execute(select(Event).order_by(desc(Event.timestamp)).limit(500))
+    import time
+    now = time.time()
+    if _ANALYTICS_CACHE["data"] and (now - _ANALYTICS_CACHE["timestamp"] < 15.0):
+        return _ANALYTICS_CACHE["data"]
+
+    result = await db.execute(select(Event).order_by(desc(Event.timestamp)).limit(200))
     events = result.scalars().all()
 
     hourly = {f"{h:02d}:00": 0 for h in range(24)}
@@ -104,12 +111,15 @@ async def get_event_analytics(db: AsyncSession = Depends(get_db)):
         classes[c_name] = classes.get(c_name, 0) + 1
         cameras[e.camera_id] = cameras.get(e.camera_id, 0) + 1
 
-    return {
+    payload = {
         "total_events": len(events),
         "hourly": [{"hour": k, "count": v} for k, v in hourly.items()],
         "top_classes": [{"class": k, "count": v} for k, v in sorted(classes.items(), key=lambda x: x[1], reverse=True)[:5]],
         "top_cameras": [{"camera_id": k, "count": v} for k, v in sorted(cameras.items(), key=lambda x: x[1], reverse=True)[:5]],
     }
+    _ANALYTICS_CACHE["timestamp"] = now
+    _ANALYTICS_CACHE["data"] = payload
+    return payload
 
 
 @router.delete("/{event_id}")

@@ -259,7 +259,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
             src={go2rtcUrl(`/api/stream.mjpeg?src=${cameraId}`)}
             alt="Camera Feed"
             onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src = apiUrl(`/cameras/${cameraId}/snapshot?t=${Date.now()}`);
+              const target = e.currentTarget as HTMLImageElement;
+              if (!target.dataset.retrying) {
+                target.dataset.retrying = "true";
+                setTimeout(() => {
+                  target.src = apiUrl(`/cameras/${cameraId}/snapshot?t=${Date.now()}`);
+                  delete target.dataset.retrying;
+                }, 3000);
+              }
             }}
             style={{ 
               width: '100%', 
