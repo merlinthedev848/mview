@@ -129,14 +129,14 @@ const CameraFeedComponent: React.FC<{
       });
     }
 
-    pc.onconnectionstatechange = () => {
+    pc.oniceconnectionstatechange = () => {
       if (pc) {
-        if (pc.connectionState === 'connected') {
+        if (pc.iceConnectionState === 'connected') {
           window.clearTimeout(rtcTimeout);
           setConnected(true);
           videoRef.current?.play().catch(err => console.log("LiveView play on connection success error:", err));
         }
-        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+        if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
           console.warn('[LiveView WebRTC] connection failed/disconnected. Falling back to HLS...');
           fallbackToHls();
         }
@@ -173,11 +173,11 @@ const CameraFeedComponent: React.FC<{
 
     // Set a 2.5s connection timeout for WebRTC before failing over to HLS
     rtcTimeout = window.setTimeout(() => {
-      if (pc && pc.connectionState !== 'connected') {
+      if (pc && pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed') {
         console.warn(`[LiveView WebRTC] connection timed out after 6.0s for ${cam.name}. Falling back to HLS...`);
         fallbackToHls();
       }
-    }, 6000);
+    }, 2500);
 
     return () => {
       window.clearTimeout(rtcTimeout);
