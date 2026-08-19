@@ -189,7 +189,7 @@ const MapView = () => {
             <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(var(--surface-border) 1px, transparent 1px), linear-gradient(90deg, var(--surface-border) 1px, transparent 1px)', backgroundSize: '50px 50px', opacity: 0.18 }} />
           )}
 
-          {floorplan && cameras.map(cam => (
+          {cameras.map(cam => (
             <div
               key={cam.id}
               onPointerDown={(event) => {

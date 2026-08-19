@@ -1,9 +1,10 @@
 import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
-import { Video, PlaySquare, Bell, Settings as SettingsIcon, ShieldCheck, HardDrive, LogOut, Wifi, LayoutDashboard, Map, Bot, Send, X } from 'lucide-react';
+import { Video, PlaySquare, Bell, Settings as SettingsIcon, ShieldCheck, HardDrive, LogOut, Wifi, LayoutDashboard, Map, Bot, Send, X, Volume2, VolumeX } from 'lucide-react';
 
 import Login     from './pages/Login';
 import { apiUrl } from './lib/endpoints';
+import { audioAlerts } from './lib/audioAlerts';
 
 const LiveView = lazy(() => import('./pages/LiveView'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -44,6 +45,7 @@ const Sidebar = ({ onLogout, onToggleAI, showAIActive }: { onLogout: () => void;
   const [storage, setStorage] = useState<any>(null);
   const [recordingStorage, setRecordingStorage] = useState<any>(null);
   const [systemStats, setSystemStats] = useState({ cpu: '--', up: '0.00', down: '0.00', latency: '--' });
+  const [audioEnabled, setAudioEnabled] = useState(() => audioAlerts.isEnabled());
 
   useEffect(() => {
     let fallbackTimer: number | undefined;
@@ -95,6 +97,9 @@ const Sidebar = ({ onLogout, onToggleAI, showAIActive }: { onLogout: () => void;
     const handleSnapshot = (event: MessageEvent) => {
       try {
         const message = JSON.parse(event.data);
+        if (message.type === 'ai_event') {
+          audioAlerts.playChime('threat');
+        }
         applySnapshot(message.payload);
       } catch {}
     };
@@ -161,6 +166,19 @@ const Sidebar = ({ onLogout, onToggleAI, showAIActive }: { onLogout: () => void;
         >
           <Bot size={16} style={{ color: 'var(--pink)' }} />
           AI Operator
+        </button>
+
+        <button 
+          className="nav-item"
+          onClick={() => {
+            const next = audioAlerts.toggle();
+            audioAlerts.playChime('info');
+            setAudioEnabled(next);
+          }}
+          style={{ border: 'none', background: 'transparent', textAlign: 'left', width: '100%', cursor: 'pointer', outline: 'none', display: 'flex', alignItems: 'center', gap: 10 }}
+        >
+          {audioEnabled ? <Volume2 size={16} style={{ color: 'var(--cyan)' }} /> : <VolumeX size={16} style={{ color: 'var(--t3)' }} />}
+          Alert Sound: {audioEnabled ? 'ON' : 'OFF'}
         </button>
 
         <div className="nav-section">System</div>

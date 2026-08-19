@@ -706,6 +706,31 @@ const Playback: React.FC = () => {
                   <div className="playback-pill">{selectedCam?.resolution || '1080p'}</div>
 
                   <button 
+                    className="btn btn-primary"
+                    style={{ fontSize: '0.72rem', padding: '2px 8px', display: 'flex', gap: 4, alignItems: 'center' }}
+                    onClick={async () => {
+                      if (!selectedCam) return;
+                      try {
+                        const res = await fetch(apiUrl('/recordings-list/export'), {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            camera_id: selectedCam.id,
+                            start_time: new Date(timelineStart).toISOString(),
+                            end_time: new Date(timelineEnd).toISOString(),
+                          })
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          alert(`Incident Evidence Package Ready!\n\nPackage ID: ${data.export_id}\nSHA-256 Verification: ${data.sha256_hash}\n\n${data.message}`);
+                        }
+                      } catch {}
+                    }}
+                  >
+                    <Download size={12} /> Export Package
+                  </button>
+
+                  <button 
                     style={{ background: 'transparent', border: 'none', color: 'var(--t2)', cursor: 'pointer', padding: 4 }}
                     onClick={() => videoRef.current?.requestFullscreen()}
                   >

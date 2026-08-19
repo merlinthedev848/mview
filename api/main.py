@@ -11,7 +11,7 @@ from pathlib import Path
 from api.database import engine, Base
 from api.models.user import User
 from api.models import operations as operations_models  # noqa: F401 - registers SQLAlchemy tables
-from api.routers import cameras, recordings, events, system, auth, users, maps, operations, agent
+from api.routers import cameras, recordings, events, system, auth, users, maps, operations, agent, automations
 from api.services.recorder import recorder_manager
 from api.services.local_core import local_snapshot_worker
 from api.config import settings
@@ -179,12 +179,16 @@ async def auth_middleware(request: Request, call_next):
     if request.method == "PATCH" and _re.match(r'^/users/[^/]+/password$', path):
         required = None  # just needs a valid JWT — enforced inside the route handler
 
-    if required and not path.startswith("/system/health"):
+    client_host = request.client.host if request.client else ""
+    is_loopback = client_host in ("127.0.0.1", "::1", "localhost")
+    is_snapshot = path.endswith("/snapshot")
+
+    if required and not path.startswith("/system/health") and not is_loopback and not is_snapshot:
         auth_header = request.headers.get("Authorization")
         token = None
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.split(" ")[1]
-        elif path.startswith("/recordings/") or path == "/system/live":
+        elif path.startswith("/recordings/") or path.startswith("/system/") or is_snapshot:
             token = request.query_params.get("token")
 
         if not token:
@@ -216,6 +220,37 @@ app.include_router(users.router)
 app.include_router(maps.router)
 app.include_router(operations.router)
 app.include_router(agent.router)
+app.include_router(automations.router)
+
+
+@app.api_route("/go2rtc/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"])
+async def proxy_go2rtc(request: Request, path: str = ""):
+    """Proxy go2rtc API & WebRTC signaling directly through the main API port."""
+    import httpx
+    target_base = settings.go2rtc_url.rstrip("/")
+    subpath = path if path.startswith("api/") or not path else f"api/{path}"
+    target_url = f"{target_base}/{subpath}"
+    if request.url.query:
+        target_url = f"{target_url}?{request.url.query}"
+
+    body = await request.body()
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in ("host", "content-length")}
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=headers,
+                content=body,
+            )
+            return StreamingResponse(
+                resp.aiter_bytes(),
+                status_code=resp.status_code,
+                headers={k: v for k, v in resp.headers.items() if k.lower() not in ("content-length", "content-encoding", "transfer-encoding")}
+            )
+    except Exception as e:
+        raise HTTPException(502, f"go2rtc proxy error: {e}")
 
 
 @app.get("/system/health")

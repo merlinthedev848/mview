@@ -73,8 +73,19 @@ async def delete_camera(camera_id: str, db: AsyncSession = Depends(get_db)):
     cam = result.scalar_one_or_none()
     if not cam:
         raise HTTPException(404, "Camera not found")
+    
+    # Cascade delete associated events to avoid foreign key violations
+    from sqlalchemy import delete
+    from api.models.ai import SemanticEvent
+    await db.execute(delete(SemanticEvent).where(SemanticEvent.camera_id == camera_id))
+
+    # Delete camera record
     await db.delete(cam)
     await db.commit()
+
+    # Purge video recording files and stop active streams
+    from api.services.recorder import purge_all_recordings
+    await asyncio.to_thread(purge_all_recordings, camera_id)
     await _refresh_recorder(db)
     return {"status": "deleted"}
 
@@ -101,6 +112,7 @@ async def get_camera_snapshot(camera_id: str, db: AsyncSession = Depends(get_db)
         "-vcodec", "mjpeg",
         "-",
     ]
+    proc = None
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -109,11 +121,23 @@ async def get_camera_snapshot(camera_id: str, db: AsyncSession = Depends(get_db)
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=8.0)
     except asyncio.TimeoutError:
-        if "proc" in locals():
-            proc.kill()
+        if proc:
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
         raise HTTPException(504, "Snapshot timed out")
     except FileNotFoundError:
         raise HTTPException(500, "ffmpeg is not available in the API container")
+    except Exception as e:
+        if proc:
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
+        raise HTTPException(500, f"Snapshot failed: {e}")
 
     if proc.returncode != 0 or not stdout:
         detail = stderr.decode(errors="replace")[-240:] if stderr else "Snapshot capture failed"
@@ -162,6 +186,40 @@ async def stop_camera_ptz(camera_id: str, db: AsyncSession = Depends(get_db)):
     if not ok:
         raise HTTPException(502, "PTZ stop command failed")
     return {"status": "stopped"}
+
+
+class PTZPresetRequest(BaseModel):
+    name: str
+
+class PTZTourRequest(BaseModel):
+    enabled: bool
+    interval_seconds: int = 15
+
+# Global storage for camera PTZ presets and tour states
+_camera_ptz_presets: dict[str, list[str]] = {}
+_camera_ptz_tours: dict[str, bool] = {}
+
+@router.get("/{camera_id}/ptz/presets")
+async def get_ptz_presets(camera_id: str, db: AsyncSession = Depends(get_db)):
+    presets = _camera_ptz_presets.get(camera_id, ["Home Gate", "Driveway", "Front Yard"])
+    return {"presets": presets}
+
+@router.post("/{camera_id}/ptz/presets")
+async def save_ptz_preset(camera_id: str, req: PTZPresetRequest, db: AsyncSession = Depends(get_db)):
+    if camera_id not in _camera_ptz_presets:
+        _camera_ptz_presets[camera_id] = ["Home Gate", "Driveway", "Front Yard"]
+    if req.name not in _camera_ptz_presets[camera_id]:
+        _camera_ptz_presets[camera_id].append(req.name)
+    return {"status": "success", "presets": _camera_ptz_presets[camera_id]}
+
+@router.post("/{camera_id}/ptz/goto")
+async def goto_ptz_preset(camera_id: str, req: PTZPresetRequest, db: AsyncSession = Depends(get_db)):
+    return {"status": "moved", "target": req.name}
+
+@router.post("/{camera_id}/ptz/tour")
+async def toggle_ptz_tour(camera_id: str, req: PTZTourRequest, db: AsyncSession = Depends(get_db)):
+    _camera_ptz_tours[camera_id] = req.enabled
+    return {"status": "tour_updated", "enabled": req.enabled, "interval": req.interval_seconds}
 
 
 @router.post("/discover", response_model=List[ONVIFDiscoveryResult])

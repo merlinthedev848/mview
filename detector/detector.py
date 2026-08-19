@@ -27,9 +27,29 @@ DETECT_CLASSES = [
 
 # For demonstration, we'll monitor a single camera stream.
 # In a full multi-processing architecture, this would be spawned per camera.
-CAMERA_ID = os.getenv("CAMERA_ID", "default_cam")
-# Fallback to a public RTSP stream or local video file if go2rtc isn't running
-STREAM_URL = os.getenv("STREAM_URL", "rtsp://localhost:8554/camera1") 
+CAMERA_ID = os.getenv("CAMERA_ID", "")
+STREAM_URL = os.getenv("STREAM_URL", "")
+
+def fetch_active_streams() -> list[tuple[str, str]]:
+    """Query Sentinel NVR API to discover active camera stream RTSP URLs."""
+    api_url = os.getenv("API_URL", "http://127.0.0.1:8000/cameras")
+    try:
+        import urllib.request
+        req = urllib.request.Request(api_url, headers={"User-Agent": "Sentinel-Detector/1.0"})
+        with urllib.request.urlopen(req, timeout=3.0) as resp:
+            if resp.status == 200:
+                cams = json.loads(resp.read().decode())
+                streams = []
+                for c in cams:
+                    cid = c.get("id")
+                    if cid and c.get("status") in ("online", "recording"):
+                        # Prefer go2rtc RTSP proxy stream, falling back to camera RTSP URL
+                        rtsp = f"rtsp://127.0.0.1:8554/{cid}"
+                        streams.append((cid, rtsp))
+                return streams
+    except Exception:
+        pass
+    return []
 
 class DetectorNode:
     def __init__(self):
@@ -54,11 +74,24 @@ class DetectorNode:
         self.cooldown = EVENT_COOLDOWN_SECONDS
 
     def run(self):
-        logger.info(f"Connecting to stream: {STREAM_URL}")
-        cap = cv2.VideoCapture(STREAM_URL)
+        target_camera_id = CAMERA_ID
+        target_url = STREAM_URL
+
+        # If no explicit STREAM_URL is given or if default camera1 is set, auto-discover from API
+        if not target_url or "camera1" in target_url:
+            active_streams = fetch_active_streams()
+            if active_streams:
+                target_camera_id, target_url = active_streams[0]
+            else:
+                logger.info("Waiting for adopted camera streams from Sentinel NVR...")
+                time.sleep(15)
+                return
+
+        logger.info(f"Connecting to camera [{target_camera_id}] stream: {target_url}")
+        cap = cv2.VideoCapture(target_url)
         
         if not cap.isOpened():
-            logger.error("Failed to open video stream. Retrying in 10s...")
+            logger.info(f"Stream {target_url} not available yet. Retrying in 10s...")
             time.sleep(10)
             return
 
@@ -128,11 +161,14 @@ class DetectorNode:
                     })
 
             if detections:
-                self.publish_event(detections, frame_w, frame_h)
+                self.publish_event(detections, frame_w, frame_h, target_camera_id)
 
         cap.release()
+        logger.info("Stream connection lost or ended. Reconnecting in 5s...")
+        time.sleep(5)
 
-    def publish_event(self, detections, frame_w, frame_h):
+    def publish_event(self, detections, frame_w, frame_h, camera_id="default_cam"):
+        cam_id = camera_id or CAMERA_ID or "default_cam"
         now = time.time()
         publishable = []
         for detection in detections:
@@ -146,12 +182,12 @@ class DetectorNode:
             return
 
         payload = {
-            "camera_id": CAMERA_ID,
+            "camera_id": cam_id,
             "timestamp": now,
             "frame": {"width": frame_w, "height": frame_h},
             "objects": publishable
         }
-        topic = f"sentinel/events/{CAMERA_ID}"
+        topic = f"sentinel/events/{cam_id}"
         if self.mqtt_client:
             self.mqtt_client.publish(topic, json.dumps(payload, separators=(",", ":")), qos=0)
             logger.info(f"Published event with {len(publishable)} objects to {topic}")

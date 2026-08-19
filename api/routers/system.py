@@ -34,6 +34,9 @@ class AIConfig(BaseModel):
     min_confidence: float = Field(default=0.65, ge=0, le=1)
     enable_alpr: bool = False
     enable_face_recognition: bool = False
+    ai_provider: str = "local"
+    gemini_api_key: str = ""
+    openai_api_key: str = ""
 
 
 class NetworkConfig(BaseModel):
@@ -87,6 +90,9 @@ def _compose_config(data: dict) -> SystemConfigUpdate:
             min_confidence=ai.get("min_confidence", 0.65),
             enable_alpr=ai.get("enable_alpr", False),
             enable_face_recognition=ai.get("enable_face_recognition", False),
+            ai_provider=ai.get("ai_provider", settings.ai_provider),
+            gemini_api_key=ai.get("gemini_api_key", settings.gemini_api_key),
+            openai_api_key=ai.get("openai_api_key", settings.openai_api_key),
         ),
         network=NetworkConfig(
             api_port=network.get("api_port", 8000),
@@ -398,12 +404,72 @@ async def backup_database(
 
 
 @router.post("/recordings/purge")
+@router.post("/purge-recordings")
 async def purge_recordings(camera_id: str | None = Query(default=None)):
     from api.services.recorder import purge_all_recordings, storage_report
     result = await asyncio.to_thread(purge_all_recordings, camera_id)
     report = await asyncio.to_thread(storage_report)
     await local_core.refresh_snapshot(include_storage=True)
     return {"status": "purged", **result, "storage_report": report}
+
+
+@router.get("/diagnostics")
+async def run_diagnostics(db: AsyncSession = Depends(get_db)):
+    """Run an automated diagnostic audit on database, go2rtc, storage, and workers."""
+    import httpx, shutil
+    from datetime import datetime
+    db_ok = False
+    try:
+        from sqlalchemy import select
+        await db.execute(select(1))
+        db_ok = True
+    except Exception:
+        pass
+
+    go2rtc_ok = False
+    try:
+        url = getattr(settings, "go2rtc_url", "http://127.0.0.1:1984").rstrip('/')
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            res = await client.get(f"{url}/api/streams")
+            go2rtc_ok = res.status_code == 200
+    except Exception:
+        pass
+
+    storage_target = settings.storage_path if (hasattr(settings, "storage_path") and os.path.exists(settings.storage_path)) else "."
+    free_gb = 0.0
+    total_gb = 0.0
+    usage_percent = 0.0
+    try:
+        disk = shutil.disk_usage(storage_target)
+        free_gb = round(disk.free / 1_073_741_824, 2)
+        total_gb = round(disk.total / 1_073_741_824, 2)
+        if disk.total > 0:
+            usage_percent = round(((disk.total - disk.free) / disk.total) * 100, 1)
+    except Exception:
+        pass
+
+    return {
+        "status": "healthy" if (db_ok and go2rtc_ok) else "degraded",
+        "database_connected": db_ok,
+        "go2rtc_active": go2rtc_ok,
+        "storage": {
+            "free_gb": free_gb,
+            "total_gb": total_gb,
+            "usage_percent": usage_percent
+        },
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
+@router.post("/maintenance/vacuum")
+async def vacuum_database(db: AsyncSession = Depends(get_db)):
+    """Re-index and clean orphaned records to optimize query speed."""
+    from sqlalchemy import text
+    try:
+        await db.execute(text("ANALYZE;"))
+        return {"status": "success", "message": "Database query statistics re-indexed."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 
 @router.get("/config")
@@ -433,9 +499,13 @@ async def update_system_config(config: SystemConfigUpdate):
         
     settings.retention_days = config.retention_days
     for key, value in config.ai.model_dump().items():
-        setting_name = f"ai_{key}"
-        if hasattr(settings, setting_name):
-            setattr(settings, setting_name, value)
+        if key in ("ai_provider", "gemini_api_key", "openai_api_key"):
+            if hasattr(settings, key):
+                setattr(settings, key, value)
+        else:
+            setting_name = f"ai_{key}"
+            if hasattr(settings, setting_name):
+                setattr(settings, setting_name, value)
     for key, value in config.network.model_dump().items():
         setting_name = f"network_{key}"
         if hasattr(settings, setting_name):

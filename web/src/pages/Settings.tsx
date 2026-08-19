@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Trash2, Edit2, Wifi, WifiOff, CheckCircle, XCircle, Loader, ChevronDown, ChevronRight, ShieldCheck, KeyRound } from 'lucide-react';
+import { Search, Plus, Trash2, Edit2, Wifi, WifiOff, CheckCircle, XCircle, Loader, ChevronDown, ChevronRight, ShieldCheck, KeyRound, Activity, Database } from 'lucide-react';
 import { apiUrl } from '../lib/endpoints';
 
 interface Camera {
@@ -114,6 +114,9 @@ interface SystemConfig {
     min_confidence: number;
     enable_alpr: boolean;
     enable_face_recognition: boolean;
+    ai_provider: string;
+    gemini_api_key: string;
+    openai_api_key: string;
   };
   network: {
     api_port: number;
@@ -191,6 +194,9 @@ const defaultSystemConfig: SystemConfig = {
     min_confidence: 0.65,
     enable_alpr: false,
     enable_face_recognition: false,
+    ai_provider: 'local',
+    gemini_api_key: '',
+    openai_api_key: '',
   },
   network: {
     api_port: 8000,
@@ -461,14 +467,31 @@ const Settings: React.FC = () => {
     } catch {}
   };
 
+  const getAuthHeaders = (): Record<string, string> => {
+    const token = localStorage.getItem('mview_token');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+  };
+
   const purgeRecordings = async () => {
     const selectedCamera = purgeCameraId ? cameras.find(cam => cam.id === purgeCameraId) : null;
     const usage = selectedCamera ? `recordings for ${selectedCamera.name}` : (storageReport?.total_gb ? `${storageReport.total_gb} GB` : 'all stored video');
     if (!window.confirm(`Delete ${usage} of recordings? This cannot be undone.`)) return;
     setPurgingRecordings(true);
     try {
-      const query = purgeCameraId ? `?camera_id=${encodeURIComponent(purgeCameraId)}` : '';
-      const res = await fetch(apiUrl(`/system/recordings/purge${query}`), { method: 'POST' });
+      const token = localStorage.getItem('mview_token') || '';
+      const query = purgeCameraId 
+        ? `?camera_id=${encodeURIComponent(purgeCameraId)}&token=${encodeURIComponent(token)}`
+        : `?token=${encodeURIComponent(token)}`;
+      let res = await fetch(apiUrl(`/system/recordings/purge${query}`), { 
+        method: 'POST',
+        headers: { ...getAuthHeaders() }
+      });
+      if (!res.ok) {
+        res = await fetch(apiUrl(`/system/purge-recordings${query}`), { 
+          method: 'POST',
+          headers: { ...getAuthHeaders() }
+        });
+      }
       if (res.ok) {
         const data = await res.json();
         if (data.storage_report) setStorageReport(data.storage_report);
@@ -482,6 +505,48 @@ const Settings: React.FC = () => {
       showToast('Network error while purging recordings.');
     }
     setPurgingRecordings(false);
+  };
+
+  const [runningDiag, setRunningDiag] = useState(false);
+  const [runningVac, setRunningVac] = useState(false);
+
+  const runDiagnostics = async () => {
+    setRunningDiag(true);
+    try {
+      const token = localStorage.getItem('mview_token') || '';
+      const res = await fetch(apiUrl(`/system/diagnostics?token=${encodeURIComponent(token)}`), {
+        headers: { ...getAuthHeaders() }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        showToast(`Diagnostics: ${data.status.toUpperCase()} | DB: ${data.database_connected ? 'OK' : 'ERR'} | go2rtc: ${data.go2rtc_active ? 'OK' : 'ERR'} | Free Disk: ${data.storage.free_gb} GB`);
+      } else {
+        showToast('Diagnostics audit failed.');
+      }
+    } catch {
+      showToast('Network error running diagnostics.');
+    }
+    setRunningDiag(false);
+  };
+
+  const runVacuum = async () => {
+    setRunningVac(true);
+    try {
+      const token = localStorage.getItem('mview_token') || '';
+      const res = await fetch(apiUrl(`/system/maintenance/vacuum?token=${encodeURIComponent(token)}`), { 
+        method: 'POST',
+        headers: { ...getAuthHeaders() }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        showToast(data.message || 'Database query indexes optimized.');
+      } else {
+        showToast('Database maintenance failed.');
+      }
+    } catch {
+      showToast('Network error during database maintenance.');
+    }
+    setRunningVac(false);
   };
 
   const loadZoneSnapshot = async (cameraId: string) => {
@@ -637,6 +702,25 @@ const Settings: React.FC = () => {
     } catch {}
   };
 
+  const deleteCamera = async (id: string) => {
+    const cam = cameras.find(c => c.id === id);
+    if (!window.confirm(`Are you sure you want to delete camera "${cam?.name || id}"? This will also remove associated events and recordings.`)) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(apiUrl(`/cameras/${id}`), { method: 'DELETE' });
+      if (res.ok) {
+        showToast('Camera deleted successfully.');
+        await fetchCameras();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast(`Failed to delete camera: ${err.detail || 'Unknown error'}`);
+      }
+    } catch {
+      showToast('Network error while deleting camera.');
+    }
+    setDeletingId(null);
+  };
+
   useEffect(() => { fetchCameras(); }, []);
 
   useEffect(() => () => {
@@ -777,18 +861,6 @@ const Settings: React.FC = () => {
       x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
       y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)),
     };
-  };
-
-  // ── Delete ──────────────────────────────────────────────────────
-  const deleteCamera = async (id: string) => {
-    if (!window.confirm('Delete this camera? This cannot be undone.')) return;
-    setDeletingId(id);
-    try {
-      await fetch(apiUrl(`/cameras/${id}`), { method: 'DELETE' });
-      await fetchCameras();
-      showToast('Camera removed.');
-    } catch {}
-    setDeletingId(null);
   };
 
   const navTabs: { id: Tab; label: string }[] = [
@@ -1228,7 +1300,7 @@ const Settings: React.FC = () => {
             </>
           )}
 
-          {tab === 'ai' && (
+          {tab === 'ai' && (<>
             <div className="card">
               <div className="card-head">
                 <span className="card-title">AI Pipeline Configuration</span>
@@ -1327,7 +1399,68 @@ const Settings: React.FC = () => {
                 </button>
               </div>
             </div>
-          )}
+
+            <div className="card" style={{ marginTop: 24 }}>
+              <div className="card-head">
+                <span className="card-title">Sentinel Active AI Operator Settings</span>
+              </div>
+              <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 20 }}>
+                  <div className="form-group">
+                    <label className="form-label">Active AI Provider</label>
+                    <select
+                      className="form-select"
+                      value={systemConfig.ai.ai_provider || 'local'}
+                      onChange={e => setSystemConfig(c => ({ ...c, ai: { ...c.ai, ai_provider: e.target.value } }))}
+                    >
+                      <option value="local">Local Rule-Based (No API Keys needed)</option>
+                      <option value="gemini">Google Gemini VLM (Gemini 1.5 Flash)</option>
+                      <option value="openai">OpenAI GPT VLM (GPT-4o mini)</option>
+                    </select>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: 4 }}>
+                      Select the LLM/VLM backend used to run advanced visual description summaries and function tool-calling commands.
+                    </div>
+                  </div>
+
+                  {systemConfig.ai.ai_provider === 'gemini' && (
+                    <div className="form-group">
+                      <label className="form-label">Gemini API Key</label>
+                      <div style={{ position: 'relative' }}>
+                        <input
+                          className="form-input"
+                          type="password"
+                          value={systemConfig.ai.gemini_api_key || ''}
+                          onChange={e => setSystemConfig(c => ({ ...c, ai: { ...c.ai, gemini_api_key: e.target.value } }))}
+                          placeholder="AIzaSy..."
+                        />
+                        <KeyRound size={14} style={{ position: 'absolute', right: 12, top: 12, color: 'var(--text-3)' }} />
+                      </div>
+                    </div>
+                  )}
+
+                  {systemConfig.ai.ai_provider === 'openai' && (
+                    <div className="form-group">
+                      <label className="form-label">OpenAI API Key</label>
+                      <div style={{ position: 'relative' }}>
+                        <input
+                          className="form-input"
+                          type="password"
+                          value={systemConfig.ai.openai_api_key || ''}
+                          onChange={e => setSystemConfig(c => ({ ...c, ai: { ...c.ai, openai_api_key: e.target.value } }))}
+                          placeholder="sk-proj-..."
+                        />
+                        <KeyRound size={14} style={{ position: 'absolute', right: 12, top: 12, color: 'var(--text-3)' }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <button className="btn btn-primary" style={{ width: 'fit-content' }} onClick={() => saveSystemConfig()} disabled={savingConfig}>
+                  <CheckCircle size={15}/> {savingConfig ? 'Saving...' : 'Apply Operator Settings'}
+                </button>
+              </div>
+            </div>
+          </>)}
 
           {tab === 'network' && (
             <div className="card">
@@ -1590,6 +1723,12 @@ const Settings: React.FC = () => {
                       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                         <button className="btn btn-danger" onClick={purgeRecordings} disabled={purgingRecordings}>
                           {purgingRecordings ? 'Purging...' : <><Trash2 size={14} /> Purge Recordings</>}
+                        </button>
+                        <button className="btn btn-ghost" onClick={runDiagnostics} disabled={runningDiag}>
+                          {runningDiag ? 'Checking...' : <><Activity size={14} /> Run Diagnostics</>}
+                        </button>
+                        <button className="btn btn-ghost" onClick={runVacuum} disabled={runningVac}>
+                          {runningVac ? 'Optimizing...' : <><Database size={14} /> Re-index DB</>}
                         </button>
                         <span style={{ color: 'var(--text-3)', fontSize: '0.72rem' }}>
                           Current archive: {storageReport ? `${storageReport.total_gb} GB` : 'loading...'}

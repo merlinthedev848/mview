@@ -26,6 +26,7 @@ async def capture_snapshot(rtsp_url: str) -> bytes | None:
         "-vcodec", "mjpeg",
         "-",
     ]
+    proc = None
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -36,12 +37,18 @@ async def capture_snapshot(rtsp_url: str) -> bytes | None:
         if proc.returncode == 0 and stdout:
             return stdout
     except Exception:
-        pass
+        if proc:
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
     return None
 
 MQTT_BROKER = settings.mqtt_broker
 MQTT_PORT = settings.mqtt_port
 _LAST_ZONE_EVENTS: dict[tuple[str, str, str], float] = {}
+_LAST_VLM_ANALYSIS: dict[str, float] = {}
 
 
 def _point_in_polygon(x: float, y: float, points: list[dict]) -> bool:
@@ -149,13 +156,21 @@ async def process_mqtt_events():
                             if camera and isinstance(camera.config, dict):
                                 zones = camera.config.get("zones") or []
 
-                            # VLM Scene Interpretation
+                            # VLM Scene Interpretation (throttled to at most once per 10s per camera)
                             vlm_result = None
                             rtsp_url = camera.rtsp_url_sub or camera.rtsp_url_main
-                            if rtsp_url and objects:
+                            now_ts = datetime.utcnow().timestamp()
+                            last_vlm = _LAST_VLM_ANALYSIS.get(camera_id, 0)
+                            if rtsp_url and objects and (now_ts - last_vlm >= 10.0):
+                                _LAST_VLM_ANALYSIS[camera_id] = now_ts
                                 detected_classes = [obj.get("class", "object") for obj in objects]
                                 try:
                                     snapshot_bytes = await capture_snapshot(rtsp_url)
+                                    if not snapshot_bytes:
+                                        logger.warning(f"[WATCHDOG Alert] Signal loss detected on camera {camera_id}")
+                                    elif len(snapshot_bytes) < 300:
+                                        logger.warning(f"[WATCHDOG Alert] Camera tampering / lens obstruction detected on camera {camera_id}")
+                                    
                                     if snapshot_bytes:
                                         from api.services.vlm_service import vlm_service
                                         vlm_result = await vlm_service.analyze_frame(snapshot_bytes, detected_classes)

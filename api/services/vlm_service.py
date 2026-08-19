@@ -12,6 +12,17 @@ class VLMService:
     Supports local fallback, Google Gemini API, and OpenAI GPT API.
     """
 
+    def _clean_json_text(self, text: str) -> str:
+        text = text.strip()
+        if text.startswith("```"):
+            lines = text.splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].startswith("```"):
+                lines = lines[:-1]
+            text = "\n".join(lines).strip()
+        return text
+
     async def analyze_frame(self, image_bytes: bytes, detected_classes: list[str]) -> dict:
         """
         Takes raw image bytes, runs VLM analysis, and returns structured summary & threat rating.
@@ -64,7 +75,7 @@ class VLMService:
                 if resp.status_code == 200:
                     data = resp.json()
                     text = data["candidates"][0]["content"]["parts"][0]["text"]
-                    return json.loads(text)
+                    return json.loads(self._clean_json_text(text))
                 else:
                     logger.error(f"Gemini API returned status {resp.status_code}: {resp.text}")
         except Exception as e:
@@ -113,7 +124,7 @@ class VLMService:
                 if resp.status_code == 200:
                     data = resp.json()
                     text = data["choices"][0]["message"]["content"]
-                    return json.loads(text)
+                    return json.loads(self._clean_json_text(text))
                 else:
                     logger.error(f"OpenAI API returned status {resp.status_code}: {resp.text}")
         except Exception as e:

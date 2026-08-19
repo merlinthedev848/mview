@@ -156,14 +156,27 @@ class CameraRecorder:
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
-            stdout=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
         )
 
-        _, stderr = await proc.communicate()
+        # Read stderr continuously to prevent pipe buffer saturation deadlock
+        stderr_lines = []
+        while True:
+            line = await proc.stderr.readline()
+            if not line:
+                break
+            decoded = line.decode(errors="replace").strip()
+            if decoded:
+                logger.debug(f"[{self.camera_name}] ffmpeg: {decoded}")
+                stderr_lines.append(decoded)
+                if len(stderr_lines) > 50:
+                    stderr_lines.pop(0)
+
+        await proc.wait()
 
         if proc.returncode not in (0, 255):  # 255 = SIGTERM (normal stop)
-            err = stderr.decode(errors="replace") if stderr else "unknown"
+            err = "\n".join(stderr_lines) if stderr_lines else "unknown"
             raise RuntimeError(f"ffmpeg exited {proc.returncode}: {err[-300:]}")
 
         logger.info(f"[{self.camera_name}] ffmpeg segment completed normally.")
@@ -419,23 +432,40 @@ def purge_all_recordings(camera_id: str | None = None) -> dict:
     purged_count = 0
     purged_bytes = 0
 
-    if not RECORDINGS_BASE.exists():
-        return {"deleted_files": 0, "deleted_gb": 0.0}
+    cid = camera_id.strip() if (camera_id and camera_id.strip()) else None
 
-    camera_dirs = [RECORDINGS_BASE / camera_id] if camera_id else list(RECORDINGS_BASE.iterdir())
-    for cam_dir in camera_dirs:
-        if not cam_dir.is_dir():
+    possible_bases = [
+        RECORDINGS_BASE,
+        Path(settings.recordings_dir).resolve(),
+        Path("./recordings").resolve(),
+        Path(settings.storage_path) / "recordings",
+    ]
+
+    seen_files = set()
+    for base in possible_bases:
+        if not base.exists():
             continue
-        for f in cam_dir.glob("*.mp4"):
-            try:
-                file_size = f.stat().st_size
-                f.unlink()
-                purged_count += 1
-                purged_bytes += file_size
-            except Exception as e:
-                logger.error(f"Error purging recording {f}: {e}")
 
-    target = camera_id or "all cameras"
+        patterns = ["*.mp4", "*.mkv", "*.ts", "*.jpg", "*.jpeg", "*.png", "*.tmp"]
+        for pattern in patterns:
+            if cid:
+                cam_dir = base / cid
+                files = list(cam_dir.rglob(pattern)) if cam_dir.exists() else []
+            else:
+                files = list(base.rglob(pattern))
+
+            for f in files:
+                if f.is_file() and f not in seen_files:
+                    seen_files.add(f)
+                    try:
+                        file_size = f.stat().st_size
+                        f.unlink()
+                        purged_count += 1
+                        purged_bytes += file_size
+                    except Exception as e:
+                        logger.error(f"Error purging recording {f}: {e}")
+
+    target = cid or "all cameras"
     logger.warning(f"Manual recording purge for {target} deleted {purged_count} files ({round(purged_bytes / 1_073_741_824, 2)} GB)")
     return {
         "deleted_files": purged_count,
