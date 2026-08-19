@@ -474,7 +474,10 @@ const Settings: React.FC = () => {
     setPurgingRecordings(true);
     try {
       const query = purgeCameraId ? `?camera_id=${encodeURIComponent(purgeCameraId)}` : '';
-      const res = await fetch(apiUrl(`/system/recordings/purge${query}`), { method: 'POST' });
+      let res = await fetch(apiUrl(`/system/recordings/purge${query}`), { method: 'POST' });
+      if (!res.ok) {
+        res = await fetch(apiUrl(`/system/purge-recordings${query}`), { method: 'POST' });
+      }
       if (res.ok) {
         const data = await res.json();
         if (data.storage_report) setStorageReport(data.storage_report);
@@ -678,6 +681,25 @@ const Settings: React.FC = () => {
     } catch {}
   };
 
+  const deleteCamera = async (id: string) => {
+    const cam = cameras.find(c => c.id === id);
+    if (!window.confirm(`Are you sure you want to delete camera "${cam?.name || id}"? This will also remove associated events and recordings.`)) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(apiUrl(`/cameras/${id}`), { method: 'DELETE' });
+      if (res.ok) {
+        showToast('Camera deleted successfully.');
+        await fetchCameras();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast(`Failed to delete camera: ${err.detail || 'Unknown error'}`);
+      }
+    } catch {
+      showToast('Network error while deleting camera.');
+    }
+    setDeletingId(null);
+  };
+
   useEffect(() => { fetchCameras(); }, []);
 
   useEffect(() => () => {
@@ -818,18 +840,6 @@ const Settings: React.FC = () => {
       x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
       y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)),
     };
-  };
-
-  // ── Delete ──────────────────────────────────────────────────────
-  const deleteCamera = async (id: string) => {
-    if (!window.confirm('Delete this camera? This cannot be undone.')) return;
-    setDeletingId(id);
-    try {
-      await fetch(apiUrl(`/cameras/${id}`), { method: 'DELETE' });
-      await fetchCameras();
-      showToast('Camera removed.');
-    } catch {}
-    setDeletingId(null);
   };
 
   const navTabs: { id: Tab; label: string }[] = [

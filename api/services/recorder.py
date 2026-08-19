@@ -432,6 +432,8 @@ def purge_all_recordings(camera_id: str | None = None) -> dict:
     purged_count = 0
     purged_bytes = 0
 
+    cid = camera_id.strip() if (camera_id and camera_id.strip()) else None
+
     possible_bases = [
         RECORDINGS_BASE,
         Path(settings.recordings_dir).resolve(),
@@ -443,23 +445,27 @@ def purge_all_recordings(camera_id: str | None = None) -> dict:
     for base in possible_bases:
         if not base.exists():
             continue
-        camera_dirs = [base / camera_id] if camera_id else [d for d in base.iterdir() if d.is_dir()]
-        for cam_dir in camera_dirs:
-            if not cam_dir.exists() or not cam_dir.is_dir():
-                continue
-            for f in cam_dir.glob("*.mp4"):
-                if f in seen_files:
-                    continue
-                seen_files.add(f)
-                try:
-                    file_size = f.stat().st_size
-                    f.unlink()
-                    purged_count += 1
-                    purged_bytes += file_size
-                except Exception as e:
-                    logger.error(f"Error purging recording {f}: {e}")
 
-    target = camera_id or "all cameras"
+        patterns = ["*.mp4", "*.mkv", "*.ts", "*.jpg", "*.jpeg", "*.png", "*.tmp"]
+        for pattern in patterns:
+            if cid:
+                cam_dir = base / cid
+                files = list(cam_dir.rglob(pattern)) if cam_dir.exists() else []
+            else:
+                files = list(base.rglob(pattern))
+
+            for f in files:
+                if f.is_file() and f not in seen_files:
+                    seen_files.add(f)
+                    try:
+                        file_size = f.stat().st_size
+                        f.unlink()
+                        purged_count += 1
+                        purged_bytes += file_size
+                    except Exception as e:
+                        logger.error(f"Error purging recording {f}: {e}")
+
+    target = cid or "all cameras"
     logger.warning(f"Manual recording purge for {target} deleted {purged_count} files ({round(purged_bytes / 1_073_741_824, 2)} GB)")
     return {
         "deleted_files": purged_count,

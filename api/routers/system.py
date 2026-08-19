@@ -404,6 +404,7 @@ async def backup_database(
 
 
 @router.post("/recordings/purge")
+@router.post("/purge-recordings")
 async def purge_recordings(camera_id: str | None = Query(default=None)):
     from api.services.recorder import purge_all_recordings, storage_report
     result = await asyncio.to_thread(purge_all_recordings, camera_id)
