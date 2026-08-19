@@ -417,6 +417,7 @@ async def purge_recordings(camera_id: str | None = Query(default=None)):
 async def run_diagnostics(db: AsyncSession = Depends(get_db)):
     """Run an automated diagnostic audit on database, go2rtc, storage, and workers."""
     import httpx, shutil
+    from datetime import datetime
     db_ok = False
     try:
         from sqlalchemy import select
@@ -427,16 +428,25 @@ async def run_diagnostics(db: AsyncSession = Depends(get_db)):
 
     go2rtc_ok = False
     try:
+        url = getattr(settings, "go2rtc_url", "http://127.0.0.1:1984").rstrip('/')
         async with httpx.AsyncClient(timeout=2.0) as client:
-            res = await client.get(f"{settings.go2rtc_url.rstrip('/')}/api/streams")
+            res = await client.get(f"{url}/api/streams")
             go2rtc_ok = res.status_code == 200
     except Exception:
         pass
 
-    storage_target = settings.storage_path if os.path.exists(settings.storage_path) else "."
-    disk = shutil.disk_usage(storage_target)
-    free_gb = round(disk.free / 1_073_741_824, 2)
-    total_gb = round(disk.total / 1_073_741_824, 2)
+    storage_target = settings.storage_path if (hasattr(settings, "storage_path") and os.path.exists(settings.storage_path)) else "."
+    free_gb = 0.0
+    total_gb = 0.0
+    usage_percent = 0.0
+    try:
+        disk = shutil.disk_usage(storage_target)
+        free_gb = round(disk.free / 1_073_741_824, 2)
+        total_gb = round(disk.total / 1_073_741_824, 2)
+        if disk.total > 0:
+            usage_percent = round(((disk.total - disk.free) / disk.total) * 100, 1)
+    except Exception:
+        pass
 
     return {
         "status": "healthy" if (db_ok and go2rtc_ok) else "degraded",
@@ -445,7 +455,7 @@ async def run_diagnostics(db: AsyncSession = Depends(get_db)):
         "storage": {
             "free_gb": free_gb,
             "total_gb": total_gb,
-            "usage_percent": round(((disk.total - disk.free) / disk.total) * 100, 1)
+            "usage_percent": usage_percent
         },
         "timestamp": datetime.utcnow().isoformat()
     }
