@@ -28,9 +28,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
   const panStart = useRef({ x: 0, y: 0 });
   const micStreamRef = useRef<MediaStream | null>(null);
 
+  const isOffline = status === 'offline';
+
   // WebRTC Connection Setup
   useEffect(() => {
-    if (status === 'offline') return;
+    if (isOffline) return;
 
     let pc: RTCPeerConnection | null = null;
     let rtcTimeout: number | undefined;
@@ -61,7 +63,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
           videoRef.current?.play().catch(e => console.log("Play on connection success error:", e));
         }
         if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
-          console.warn("WebRTC connection failed/disconnected. Falling back to HLS...");
+          console.warn("WebRTC connection failed/disconnected. Falling back to MJPEG...");
           fallbackToHls();
         }
       }
@@ -103,13 +105,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
       }
     };
 
-    // Set a fast 2.5s connection timeout for WebRTC before failing over to live stream
+    // Set a fast 1.5s connection timeout for WebRTC before failing over to MJPEG stream
     rtcTimeout = window.setTimeout(() => {
       if (pc && pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed') {
-        console.warn(`WebRTC connection timed out after 2.5s for camera ${cameraId}. Falling back to live stream...`);
+        console.warn(`WebRTC connection timed out after 1.5s for camera ${cameraId}. Falling back to stream...`);
         fallbackToHls();
       }
-    }, 2500);
+    }, 1500);
 
     startStream();
 
@@ -132,7 +134,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
         videoRef.current.src = '';
       }
     };
-  }, [cameraId, status, isMicActive, retryNonce]);
+  }, [cameraId, isOffline, isMicActive, retryNonce]);
 
   // Cleanup mic stream on unmount
   useEffect(() => {
@@ -279,21 +281,40 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
             }} 
           />
         ) : (
-          <video 
-            ref={videoRef}
-            autoPlay 
-            playsInline 
-            muted={isMuted} 
-            style={{ 
-              width: '100%', 
-              height: '100%', 
-              objectFit: 'cover',
-              transform: isZoomMode ? `scale(${zoomScale}) translate(${zoomOffset.x}px, ${zoomOffset.y}px)` : 'none',
-              transformOrigin: 'center center',
-              transition: isPanning ? 'none' : 'transform 0.1s ease',
-              cursor: isZoomMode ? (isPanning ? 'grabbing' : 'grab') : 'default'
-            }} 
-          />
+          <>
+            {!isStreaming && (
+              <img 
+                src={apiUrl(`/cameras/${cameraId}/snapshot`)}
+                alt={name}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  zIndex: 1,
+                  pointerEvents: 'none'
+                }}
+              />
+            )}
+            <video 
+              ref={videoRef}
+              autoPlay 
+              playsInline 
+              muted={isMuted} 
+              style={{ 
+                width: '100%', 
+                height: '100%', 
+                objectFit: 'cover',
+                opacity: isStreaming ? 1 : 0,
+                transform: isZoomMode ? `scale(${zoomScale}) translate(${zoomOffset.x}px, ${zoomOffset.y}px)` : 'none',
+                transformOrigin: 'center center',
+                transition: isPanning ? 'none' : 'transform 0.1s ease, opacity 0.3s ease',
+                cursor: isZoomMode ? (isPanning ? 'grabbing' : 'grab') : 'default'
+              }} 
+            />
+          </>
         )
       ) : (
         <div style={{
