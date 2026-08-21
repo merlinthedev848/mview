@@ -45,6 +45,48 @@ async def get_events(
         for e in events
     ]
 
+_ANALYTICS_CACHE = {"timestamp": 0.0, "data": None}
+
+@router.get("/analytics")
+async def get_event_analytics(db: AsyncSession = Depends(get_db)):
+    """Retrieve 24h event analytics and category breakdown."""
+    import time
+    now_ts = time.time()
+    if _ANALYTICS_CACHE["data"] is not None and (now_ts - _ANALYTICS_CACHE["timestamp"]) < 15.0:
+        return _ANALYTICS_CACHE["data"]
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    since = now - datetime.timedelta(hours=24)
+    
+    query = select(Event).where(Event.timestamp >= since).order_by(Event.timestamp.asc())
+    result = await db.execute(query)
+    events = result.scalars().all()
+    
+    hourly_counts = { (now - datetime.timedelta(hours=i)).strftime("%H:00"): 0 for i in range(23, -1, -1) }
+    class_counts = {}
+    
+    for e in events:
+        if e.timestamp:
+            h_str = e.timestamp.strftime("%H:00")
+            if h_str in hourly_counts:
+                hourly_counts[h_str] += 1
+            else:
+                hourly_counts[h_str] = 1
+        cls = e.object_class or "other"
+        class_counts[cls] = class_counts.get(cls, 0) + 1
+        
+    hourly = [{"hour": k, "count": v} for k, v in hourly_counts.items()]
+    top_classes = [{"class": k, "count": v} for k, v in sorted(class_counts.items(), key=lambda x: x[1], reverse=True)]
+    
+    payload = {
+        "total_events": len(events),
+        "hourly": hourly,
+        "top_classes": top_classes
+    }
+    _ANALYTICS_CACHE["timestamp"] = now_ts
+    _ANALYTICS_CACHE["data"] = payload
+    return payload
+
 from fastapi.responses import FileResponse
 
 @router.get("/{event_id}/thumbnail")

@@ -59,29 +59,31 @@ export const Dashboard = () => {
         ]);
 
         if (camRes.ok) {
-          const camData = await camRes.json() as DashboardCamera[];
-          setCameras(camData);
+          const camData = await camRes.json();
+          const validCams = Array.isArray(camData) ? camData : [];
+          setCameras(validCams);
           setStats(s => ({
             ...s,
-            total_cameras: camData.length,
-            online_cameras: camData.filter(c => c.status === 'online' || c.status === 'recording').length,
+            total_cameras: validCams.length,
+            online_cameras: validCams.filter(c => c.status === 'online' || c.status === 'recording').length,
           }));
         }
 
         if (eventRes.ok) {
-          const eventData = await eventRes.json() as DashboardEvent[];
-          setEvents(eventData);
-          setStats(s => ({ ...s, events_today: eventData.length }));
+          const eventData = await eventRes.json();
+          const validEvents = Array.isArray(eventData) ? eventData : [];
+          setEvents(validEvents);
+          setStats(s => ({ ...s, events_today: validEvents.length }));
         }
 
         if (healthRes.ok) {
           const healthData = await healthRes.json();
-          if (healthData.storage) setStorage(healthData.storage);
+          if (healthData && healthData.storage) setStorage(healthData.storage);
         }
 
         if (analyticsRes.ok) {
           const analyticsData = await analyticsRes.json();
-          setAnalytics(analyticsData);
+          if (analyticsData && typeof analyticsData === 'object') setAnalytics(analyticsData);
         }
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error);
@@ -94,11 +96,11 @@ export const Dashboard = () => {
   }, []);
 
   const chartData = useMemo(() => {
-    if (analytics?.hourly && analytics.hourly.some(h => h.count > 0)) {
-      return analytics.hourly.map(h => ({ name: h.hour, count: h.count }));
+    if (analytics?.hourly && Array.isArray(analytics.hourly) && analytics.hourly.some(h => (h.count || 0) > 0)) {
+      return analytics.hourly.map(h => ({ name: h.hour || '--', count: Number(h.count) || 0 }));
     }
     const buckets: Record<string, number> = {};
-    for (const event of events) {
+    for (const event of (Array.isArray(events) ? events : [])) {
       const label = event.object_class || 'other';
       buckets[label] = (buckets[label] || 0) + 1;
     }
@@ -250,17 +252,17 @@ export const Dashboard = () => {
               </div>
             </div>
 
-            <div style={{ ...panelStyle, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            <div style={{ ...panelStyle, display: 'flex', flexDirection: 'column', minHeight: 220 }}>
               <div style={sectionHeaderStyle}>
                 <h2 style={{ color: 'var(--t1)', fontSize: '0.95rem', margin: 0 }}>Activity Trend</h2>
               </div>
-              <div style={{ flex: 1, minHeight: 0, padding: 12 }}>
+              <div style={{ flex: 1, minHeight: 160, padding: 12 }}>
                 {chartData.length === 0 ? (
-                  <div className="empty" style={{ height: '100%' }}>
+                  <div className="empty" style={{ height: '100%', minHeight: 140 }}>
                     <div className="empty-title">No historical trend data</div>
                   </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height={160} minWidth={100}>
                     <AreaChart data={chartData}>
                       <defs>
                         <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
