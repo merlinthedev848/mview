@@ -112,13 +112,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
       }
     };
 
-    // Set a fast 1.5s connection timeout for WebRTC before failing over to MJPEG stream
+    // Set an 8.0s connection timeout for WebRTC before failing over
     rtcTimeout = window.setTimeout(() => {
       if (pc && pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed') {
-        console.warn(`WebRTC connection timed out after 1.5s for camera ${cameraId}. Falling back to stream...`);
+        console.warn(`WebRTC connection timed out after 8.0s for camera ${cameraId}. Falling back to stream...`);
         fallbackToHls();
       }
-    }, 1500);
+    }, 8000);
 
     startStream();
 
@@ -277,12 +277,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
             alt="Camera Feed"
             onError={(e) => {
               const target = e.currentTarget as HTMLImageElement;
-              if (!target.dataset.retrying) {
-                target.dataset.retrying = "true";
+              target.dataset.fallback = "true";
+              setTimeout(() => {
+                target.src = apiUrl(`/cameras/${cameraId}/snapshot?t=${Date.now()}`);
+              }, 1000);
+            }}
+            onLoad={(e) => {
+              const target = e.currentTarget as HTMLImageElement;
+              if (target.dataset.fallback === "true") {
                 setTimeout(() => {
                   target.src = apiUrl(`/cameras/${cameraId}/snapshot?t=${Date.now()}`);
-                  delete target.dataset.retrying;
-                }, 3000);
+                }, 1000);
               }
             }}
             style={{ 

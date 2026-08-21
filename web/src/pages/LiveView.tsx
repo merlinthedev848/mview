@@ -91,7 +91,7 @@ const CameraFeedComponent: React.FC<{
   const [connected, setConnected] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
   const [showPTZ, setShowPTZ] = useState(false);
-  const streamName = cam.id;
+  const streamName = (cam.rtsp_url_sub && !maximized) ? `${cam.id}_sub` : `${cam.id}_main`;
 
   // Tools states
   const [isMuted, setIsMuted] = useState(true);
@@ -171,13 +171,13 @@ const CameraFeedComponent: React.FC<{
       }
     })();
 
-    // Set a 2.5s connection timeout for WebRTC before failing over to HLS
+    // Set an 8.0s connection timeout for WebRTC before failing over to HLS
     rtcTimeout = window.setTimeout(() => {
       if (pc && pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed') {
-        console.warn(`[LiveView WebRTC] connection timed out after 6.0s for ${cam.name}. Falling back to HLS...`);
+        console.warn(`[LiveView WebRTC] connection timed out after 8.0s for ${cam.name}. Falling back to HLS...`);
         fallbackToHls();
       }
-    }, 2500);
+    }, 8000);
 
     return () => {
       window.clearTimeout(rtcTimeout);
@@ -345,8 +345,14 @@ const CameraFeedComponent: React.FC<{
               alt="MJPEG Fallback"
               onError={(e) => {
                 const target = e.currentTarget as HTMLImageElement;
-                if (!target.dataset.retrying) {
-                  target.dataset.retrying = "true";
+                target.dataset.fallback = "true";
+                setTimeout(() => {
+                  target.src = apiUrl(`/cameras/${cam.id}/snapshot?t=${Date.now()}`);
+                }, 1000);
+              }}
+              onLoad={(e) => {
+                const target = e.currentTarget as HTMLImageElement;
+                if (target.dataset.fallback === "true") {
                   setTimeout(() => {
                     target.src = apiUrl(`/cameras/${cam.id}/snapshot?t=${Date.now()}`);
                   }, 1000);
