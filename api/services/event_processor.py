@@ -14,36 +14,20 @@ from datetime import datetime
 
 logger = logging.getLogger("mView-EventProcessor")
 
-async def capture_snapshot(rtsp_url: str) -> bytes | None:
-    cmd = [
-        "ffmpeg",
-        "-loglevel", "error",
-        "-rtsp_transport", "tcp",
-        "-i", rtsp_url,
-        "-frames:v", "1",
-        "-q:v", "4",
-        "-f", "image2pipe",
-        "-vcodec", "mjpeg",
-        "-",
-    ]
-    proc = None
+def fetch_snapshot_sync(camera_id: str) -> bytes | None:
+    import urllib.request
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=8.0)
-        if proc.returncode == 0 and stdout:
-            return stdout
-    except Exception:
-        if proc:
-            try:
-                proc.kill()
-                await proc.wait()
-            except Exception:
-                pass
+        req = urllib.request.Request(f"http://127.0.0.1:1984/api/frame.jpeg?src={camera_id}")
+        with urllib.request.urlopen(req, timeout=4.0) as response:
+            if response.status == 200:
+                return response.read()
+    except Exception as e:
+        pass
     return None
+
+async def capture_snapshot(camera_id: str) -> bytes | None:
+    import asyncio
+    return await asyncio.to_thread(fetch_snapshot_sync, camera_id)
 
 MQTT_BROKER = settings.mqtt_broker
 MQTT_PORT = settings.mqtt_port
@@ -165,7 +149,7 @@ async def process_mqtt_events():
                                 _LAST_VLM_ANALYSIS[camera_id] = now_ts
                                 detected_classes = [obj.get("class", "object") for obj in objects]
                                 try:
-                                    snapshot_bytes = await capture_snapshot(rtsp_url)
+                                    snapshot_bytes = await capture_snapshot(camera_id)
                                     if not snapshot_bytes:
                                         logger.warning(f"[WATCHDOG Alert] Signal loss detected on camera {camera_id}")
                                     elif len(snapshot_bytes) < 300:
