@@ -210,25 +210,24 @@ const Sidebar = ({ onLogout, onToggleAI, showAIActive }: { onLogout: () => void;
       </nav>
 
       {/* Storage footer */}
-      <div className="sidebar-footer">
-        <div className="storage-label">
-          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <HardDrive size={12} /> Storage
-          </span>
-          <span>{storage ? `${storage.usage_percent}%` : '--'}</span>
+      <div className="sidebar-footer" style={{ padding: '12px', borderTop: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--t3)', fontWeight: 600, marginBottom: 4, letterSpacing: '0.02em' }}>
+          <span>NVR ARCHIVE</span>
+          <span>{recordingStorage ? `${recordingStorage.total_gb} GB` : '0 GB'}</span>
         </div>
-        <div className="storage-bar">
-          <div className="storage-bar-fill" style={{ width: `${storage ? storage.usage_percent : 0}%` }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--t3)', fontWeight: 600, marginBottom: 6, letterSpacing: '0.02em' }}>
+          <span>SERVER DISK</span>
+          <span>{storage ? `${(storage.total_gb - storage.free_gb).toFixed(1)} GB` : '--'}</span>
         </div>
-        {storage && (
-          <div style={{ fontSize: '0.65rem', color: 'var(--t3)', textAlign: 'right', marginTop: '-4px', fontFamily: 'monospace' }}>
-            {recordingStorage ? `${recordingStorage.total_gb} GB archive` : `${storage.used_gb} GB used`}
-            <br />
-            {storage.used_gb} GB / {storage.total_gb} GB disk
-          </div>
-        )}
+        
+        <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2, overflow: 'hidden', marginBottom: 4 }}>
+          <div style={{ width: `${storage ? storage.usage_percent : 0}%`, height: '100%', background: 'var(--cyan)' }} />
+        </div>
+        <div style={{ fontSize: '0.6rem', color: 'var(--t3)', textAlign: 'right', fontFamily: 'monospace' }}>
+          {storage ? `${storage.usage_percent}% full` : ''}
+        </div>
 
-        <button className="nav-item" style={{ color: 'var(--t3)', marginTop: 6 }} onClick={onLogout}>
+        <button className="nav-item" style={{ color: 'var(--t3)', marginTop: 12 }} onClick={onLogout}>
           <LogOut size={15} /> Logout
         </button>
       </div>
