@@ -928,7 +928,7 @@ const Settings: React.FC = () => {
                     <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--cyan)', marginBottom: 14 }}>
                       {editingId ? 'Edit Camera' : '＋ New Camera'}
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
                       <div className="form-group">
                         <label className="form-label">Camera Name *</label>
                         <input className="form-input" placeholder="e.g. Front Door" value={manualForm.name}
@@ -1074,7 +1074,7 @@ const Settings: React.FC = () => {
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                             {manualForm.zones.map(zone => (
                               <div key={zone.id} style={{ border: zone.id === activeZoneId ? '1px solid var(--green)' : '1px solid var(--border)', borderRadius: 8, padding: 12, background: 'rgba(255,255,255,0.02)' }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 130px auto', gap: 10, alignItems: 'end' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 2fr) minmax(100px, 1fr) minmax(100px, 1fr) auto', gap: 10, alignItems: 'end' }}>
                                   <div className="form-group">
                                     <label className="form-label">Zone Name</label>
                                     <input className="form-input" value={zone.name} onFocus={() => setActiveZoneId(zone.id)} onChange={e => updateZone(zone.id, { name: e.target.value })} />
@@ -1093,7 +1093,7 @@ const Settings: React.FC = () => {
                                     <Trash2 size={14} />
                                   </button>
                                 </div>
-                                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                                <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                                   <button className="btn btn-ghost" style={{ padding: '6px 10px' }} onClick={() => setActiveZoneId(zone.id)}>Edit On Snapshot</button>
                                   <button className="btn btn-ghost" style={{ padding: '6px 10px' }} onClick={() => updateZone(zone.id, { points: createDetectionZone().points })}>Reset Points</button>
                                   <button className="btn btn-ghost" style={{ padding: '6px 10px' }} onClick={() => updateZone(zone.id, { points: zone.points.slice(0, -1) })}>Remove Last Point</button>
@@ -1271,7 +1271,7 @@ const Settings: React.FC = () => {
                               <div className="url">{cam.onvif_endpoint} · {cam.ip}</div>
                             </div>
                           </div>
-                          <div style={{ display: 'flex', gap: 10, marginTop: 10, alignItems: 'center' }}>
+                          <div style={{ display: 'flex', gap: 10, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                             <input className="form-input" style={{ width: 140, padding: '6px 10px', fontSize: '0.8rem' }} placeholder="Username" value={creds.u} onChange={e => setCreds({...creds, u: e.target.value})} />
                             <input className="form-input" style={{ width: 140, padding: '6px 10px', fontSize: '0.8rem' }} type="password" placeholder="Password" value={creds.p} onChange={e => setCreds({...creds, p: e.target.value})} />
                             <button
@@ -1306,7 +1306,7 @@ const Settings: React.FC = () => {
                 <span className="card-title">AI Pipeline Configuration</span>
               </div>
               <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20 }}>
                   <div className="form-group">
                     <label className="form-label">Global Detection Model</label>
                     <select
@@ -1466,7 +1466,7 @@ const Settings: React.FC = () => {
             <div className="card">
               <div className="card-head"><span className="card-title">Advanced Network & Streaming</span></div>
               <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 20 }}>
                   <div className="form-group">
                     <label className="form-label">Internal API Port</label>
                     <input className="form-input" value={systemConfig.network.api_port} disabled />
@@ -1519,7 +1519,7 @@ const Settings: React.FC = () => {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,0.02)', padding: '12px 16px', borderRadius: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,0.02)', padding: '12px 16px', borderRadius: 8, flexWrap: 'wrap' }}>
                   <input
                     type="checkbox"
                     checked={systemConfig.network.enable_ssl}
@@ -1548,7 +1548,7 @@ const Settings: React.FC = () => {
                   <span className="card-title">System Information</span>
                 </div>
                 <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, color: 'var(--text-2)', fontSize: '0.85rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16, color: 'var(--text-2)', fontSize: '0.85rem' }}>
                     {[
                       ['Platform', 'mView Sentinel NVR'],
                       ['Version', 'v1.0.0-beta.5-auth-fix'],
@@ -1564,7 +1564,7 @@ const Settings: React.FC = () => {
                     ))}
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginTop: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12, marginTop: 10 }}>
                     <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 700 }}>CPU Usage</div>
                       <div style={{ fontSize: '1.2rem', color: 'var(--text-1)', fontWeight: 600, fontFamily: 'JetBrains Mono' }}>12.4%</div>
@@ -1590,7 +1590,7 @@ const Settings: React.FC = () => {
                 <div className="card-head">
                   <span className="card-title">Service Controls</span>
                 </div>
-                <div style={{ padding: 24, display: 'flex', gap: 12 }}>
+                <div style={{ padding: 24, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
                   <button className="btn btn-ghost" style={{ padding: '8px 16px' }} onClick={checkUpdates} disabled={checkingUpdates}>
                     <Loader size={14} className={checkingUpdates ? 'spin' : ''}/> Check for Updates
                   </button>
@@ -1624,7 +1624,7 @@ const Settings: React.FC = () => {
                       Auto download updates
                     </label>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px auto', gap: 12, alignItems: 'end' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr)) auto', gap: 12, alignItems: 'end' }}>
                     <div className="form-group">
                       <label className="form-label">Manifest URL</label>
                       <input
@@ -1698,10 +1698,10 @@ const Settings: React.FC = () => {
                   <span className="card-title">Storage & Archive Policy</span>
                 </div>
                 <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24 }}>
                     <div className="form-group">
                       <label className="form-label">Auto-Purge Retention (Days)</label>
-                      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                         <input className="form-input" type="number" min="0" max="365"
                           value={systemConfig.retention_days}
                           onChange={e => setSystemConfig(c => ({ ...c, retention_days: parseInt(e.target.value) || 0 }))}
@@ -1753,7 +1753,7 @@ const Settings: React.FC = () => {
                       <div style={{ padding: 14, color: 'var(--text-3)', fontSize: '0.78rem' }}>No active recorder diagnostics available yet.</div>
                     ) : (
                       Object.entries(streamDiagnostics).map(([cameraId, diag]) => (
-                        <div key={cameraId} style={{ display: 'grid', gridTemplateColumns: '1.2fr 90px 90px 1fr', gap: 12, padding: '12px 14px', borderBottom: '1px solid var(--border)', alignItems: 'center', fontSize: '0.76rem' }}>
+                        <div key={cameraId} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1.4fr) minmax(85px, 0.7fr) minmax(85px, 0.7fr) minmax(130px, 1.2fr)', gap: 12, padding: '12px 14px', borderBottom: '1px solid var(--border)', alignItems: 'center', fontSize: '0.76rem' }}>
                           <div style={{ minWidth: 0 }}>
                             <div style={{ color: 'var(--text-1)', fontWeight: 700 }}>{diag.camera_name || cameraNameById[cameraId] || cameraId}</div>
                             <div style={{ color: 'var(--text-3)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{maskRtspPassword(diag.stream_url || '')}</div>
@@ -1836,7 +1836,7 @@ const Settings: React.FC = () => {
                 <div className="card-head">
                   <span className="card-title">Password & Session Security</span>
                 </div>
-                <div style={{ padding: 24, display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 14, alignItems: 'end' }}>
+                <div style={{ padding: 24, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr)) auto', gap: 16, alignItems: 'end' }}>
                   <div className="form-group">
                     <label className="form-label">Current Password</label>
                     <input
@@ -1874,7 +1874,7 @@ const Settings: React.FC = () => {
                     <div className="card-head">
                       <span className="card-title">Create User</span>
                     </div>
-                    <div style={{ padding: 24, display: 'grid', gridTemplateColumns: '1fr 1fr 160px', gap: 14 }}>
+                    <div style={{ padding: 24, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
                       <div className="form-group">
                         <label className="form-label">Username</label>
                         <input
@@ -1911,7 +1911,7 @@ const Settings: React.FC = () => {
                           <option value="admin">Admin</option>
                         </select>
                       </div>
-                      <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 18, alignItems: 'center', paddingTop: 4 }}>
+                      <div style={{ gridColumn: '1 / -1', display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'center', paddingTop: 8 }}>
                         {permissionOptions.map(permission => (
                           <label key={permission} style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-2)', fontSize: '0.8rem', textTransform: 'capitalize' }}>
                             <input
