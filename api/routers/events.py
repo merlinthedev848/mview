@@ -13,17 +13,23 @@ router = APIRouter(prefix="/events", tags=["events"])
 async def get_events(
     camera_id: Optional[str] = None,
     object_class: Optional[str] = None,
+    unreviewed_only: bool = False,
     limit: int = 50,
     db: AsyncSession = Depends(get_db)
 ):
     """Retrieve AI events with optional filtering."""
-    query = select(Event).order_by(desc(Event.timestamp)).limit(limit)
+    query = select(Event).order_by(desc(Event.timestamp))
     
     if camera_id:
         query = query.where(Event.camera_id == camera_id)
     if object_class:
         query = query.where(Event.object_class == object_class)
+    if unreviewed_only:
+        from sqlalchemy import not_, exists
+        stmt = exists().where(EventReview.event_id == Event.id).where(EventReview.verdict == 'reviewed')
+        query = query.where(not_(stmt))
         
+    query = query.limit(limit)
     result = await db.execute(query)
     events = result.scalars().all()
     review_result = await db.execute(select(EventReview).where(EventReview.event_id.in_([e.id for e in events]))) if events else None
@@ -106,3 +112,16 @@ async def delete_event(event_id: str, db: AsyncSession = Depends(get_db)):
     await db.delete(event)
     await db.commit()
     return {"status": "deleted"}
+
+@router.patch("/{event_id}/review")
+async def mark_event_reviewed(event_id: str, db: AsyncSession = Depends(get_db)):
+    import uuid
+    result = await db.execute(select(EventReview).where(EventReview.event_id == event_id))
+    review = result.scalars().first()
+    if review:
+        review.verdict = 'reviewed'
+    else:
+        review = EventReview(id=str(uuid.uuid4()), event_id=event_id, verdict='reviewed')
+        db.add(review)
+    await db.commit()
+    return {"status": "success"}

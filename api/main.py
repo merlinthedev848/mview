@@ -33,6 +33,20 @@ async def retention_worker():
             if retention_days and retention_days > 0:
                 from api.services.recorder import purge_old_recordings
                 purge_old_recordings(retention_days)
+                
+                # Clean up old database events
+                try:
+                    from api.database import async_session_maker
+                    from sqlalchemy import delete
+                    from api.models.ai import SemanticEvent
+                    from datetime import datetime, timedelta
+                    
+                    cutoff = datetime.utcnow() - timedelta(days=retention_days)
+                    async with async_session_maker() as session:
+                        await session.execute(delete(SemanticEvent).where(SemanticEvent.timestamp < cutoff))
+                        await session.commit()
+                except Exception as e:
+                    log.error(f"Failed to delete old events: {e}")
         except Exception as e:
             log.error(f"Error in retention worker: {e}")
         

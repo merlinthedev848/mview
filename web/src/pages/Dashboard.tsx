@@ -56,7 +56,7 @@ export const Dashboard = () => {
       try {
         const [camRes, eventRes, healthRes, analyticsRes] = await Promise.all([
           fetch(apiUrl('/cameras')),
-          fetch(apiUrl('/events?limit=20')),
+          fetch(apiUrl('/events?limit=20&unreviewed_only=true')),
           fetch(apiUrl('/system/health')),
           fetch(apiUrl('/events/analytics')),
         ]);
@@ -229,7 +229,11 @@ export const Dashboard = () => {
                   events.map(event => (
                     <div 
                       key={event.id} 
-                      onClick={() => navigate(`/playback?camera=${event.camera_id}&time=${event.timestamp}`)}
+                      onClick={() => {
+                        fetch(apiUrl(`/events/${event.id}/review`), { method: 'PATCH' }).catch(console.error);
+                        setEvents(e => e.filter(x => x.id !== event.id));
+                        navigate(`/playback?camera=${event.camera_id}&time=${event.timestamp}`);
+                      }}
                       style={{ 
                         display: 'flex', 
                         alignItems: 'center', 

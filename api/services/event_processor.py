@@ -194,14 +194,14 @@ async def process_mqtt_events():
                                 elif zone and zone.get("name"):
                                     object_class = f"{object_class} @ {zone.get('name')}"
                                     
-                                if zone.get("id"):
-                                    cooldown = float(zone.get("cooldown_seconds") or 0)
-                                    cooldown_key = (str(camera_id), str(zone.get("id")), str(obj.get("class") or "object"))
-                                    last_seen = _LAST_ZONE_EVENTS.get(cooldown_key, 0)
-                                    event_time = timestamp.timestamp()
-                                    if cooldown > 0 and event_time - last_seen < cooldown:
-                                        continue
-                                    _LAST_ZONE_EVENTS[cooldown_key] = event_time
+                                zone_id = str(zone.get("id") or "global")
+                                cooldown = float(zone.get("cooldown_seconds") or 60.0)
+                                cooldown_key = (str(camera_id), zone_id, str(obj.get("class") or "object"))
+                                last_seen = _LAST_ZONE_EVENTS.get(cooldown_key, 0)
+                                event_time = timestamp.timestamp()
+                                if event_time - last_seen < cooldown:
+                                    continue
+                                _LAST_ZONE_EVENTS[cooldown_key] = event_time
 
                                 event_id = str(uuid.uuid4())
                                 thumb_path = None
