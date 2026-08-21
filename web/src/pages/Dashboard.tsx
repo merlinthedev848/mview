@@ -45,7 +45,8 @@ const formatStorage = (gb?: number) => {
 export const Dashboard = () => {
   const [cameras, setCameras] = useState<DashboardCamera[]>([]);
   const [events, setEvents] = useState<DashboardEvent[]>([]);
-  const [storage, setStorage] = useState<{ total_gb: number; used_gb: number; usage_percent: number } | null>(null);
+  const [storage, setStorage] = useState<{ free_gb: number; total_gb: number; usage_percent: number } | null>(null);
+  const [recordingStorage, setRecordingStorage] = useState<{ total_gb: number } | null>(null);
   const [stats, setStats] = useState({ total_cameras: 0, online_cameras: 0, events_today: 0 });
   const [analytics, setAnalytics] = useState<{ total_events: number; hourly: { hour: string; count: number }[]; top_classes: { class: string; count: number }[] } | null>(null);
 
@@ -54,11 +55,12 @@ export const Dashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [camRes, eventRes, healthRes, analyticsRes] = await Promise.all([
+        const [camRes, eventRes, healthRes, analyticsRes, storageRes] = await Promise.all([
           fetch(apiUrl('/cameras')),
           fetch(apiUrl('/events?limit=20&unreviewed_only=true')),
           fetch(apiUrl('/system/health')),
           fetch(apiUrl('/events/analytics')),
+          fetch(apiUrl('/system/storage-report')),
         ]);
 
         if (camRes.ok) {
@@ -82,6 +84,11 @@ export const Dashboard = () => {
         if (healthRes.ok) {
           const healthData = await healthRes.json();
           if (healthData && healthData.storage) setStorage(healthData.storage);
+        }
+
+        if (storageRes.ok) {
+          const storageData = await storageRes.json();
+          if (storageData) setRecordingStorage(storageData);
         }
 
         if (analyticsRes.ok) {
@@ -136,9 +143,9 @@ export const Dashboard = () => {
       background: 'rgba(34,197,94,0.10)',
     },
     {
-      label: 'Storage Used',
-      value: storage ? formatStorage(storage.used_gb) : '0 GB',
-      detail: storage ? `${formatStorage(storage.total_gb)} total - ${storage.usage_percent}%` : 'loading',
+      label: 'NVR Archive Size',
+      value: recordingStorage ? `${recordingStorage.total_gb} GB` : '0 GB',
+      detail: storage ? `Server Disk: ${storage.usage_percent}% full` : 'loading',
       icon: HardDrive,
       tone: 'var(--pink)',
       background: 'rgba(255,0,255,0.10)',
