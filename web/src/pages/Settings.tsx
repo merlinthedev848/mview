@@ -879,7 +879,7 @@ const Settings: React.FC = () => {
     <div className="settings-page" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       {/* Top Bar */}
       <div className="topbar settings-page-topbar" style={{ justifyContent: 'space-between' }}>
-        <h1 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-1)' }}>System Configuration</h1>
+        <h1 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--t1)' }}>System Configuration</h1>
         <span style={{ fontSize: '0.8rem', color: 'var(--t2)' }}>Manage hardware, AI pipelines and network settings</span>
       </div>
 
@@ -989,8 +989,8 @@ const Settings: React.FC = () => {
                       <div className="form-group" style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', paddingTop: 14, marginTop: 6 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 10 }}>
                           <div>
-                            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-1)' }}>AI Zones & Alerts</div>
-                            <div style={{ fontSize: '0.68rem', color: 'var(--text-3)', marginTop: 3 }}>Normalized points use 0.00 to 1.00 across the camera frame.</div>
+                            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--t1)' }}>AI Zones & Alerts</div>
+                            <div style={{ fontSize: '0.68rem', color: 'var(--t3)', marginTop: 3 }}>Normalized points use 0.00 to 1.00 across the camera frame.</div>
                           </div>
                           <button className="btn btn-ghost" style={{ padding: '7px 12px' }} onClick={() => {
                             const zone = createDetectionZone();
@@ -1002,7 +1002,7 @@ const Settings: React.FC = () => {
                         </div>
                         <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 12, background: 'rgba(0,0,0,0.25)' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
-                            <div style={{ fontSize: '0.72rem', color: 'var(--text-3)' }}>Visual zone editor</div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--t3)' }}>Visual zone editor</div>
                             <button className="btn btn-ghost" style={{ padding: '6px 10px' }} onClick={() => editingId && loadZoneSnapshot(editingId)} disabled={!editingId || zoneSnapshotLoading}>
                               {zoneSnapshotLoading ? 'Loading...' : 'Load Snapshot'}
                             </button>
@@ -1061,13 +1061,13 @@ const Settings: React.FC = () => {
                               </svg>
                             </div>
                           ) : (
-                            <div style={{ padding: 12, color: 'var(--text-3)', fontSize: '0.72rem' }}>
+                            <div style={{ padding: 12, color: 'var(--t3)', fontSize: '0.72rem' }}>
                               {editingId ? 'Load a current camera snapshot, select a zone below, then click or drag points on the image.' : 'Save the camera first, then edit it to draw zones over a live snapshot.'}
                             </div>
                           )}
                         </div>
                         {manualForm.zones.length === 0 ? (
-                          <div style={{ fontSize: '0.76rem', color: 'var(--text-3)', border: '1px dashed var(--border)', borderRadius: 8, padding: 12 }}>
+                          <div style={{ fontSize: '0.76rem', color: 'var(--t3)', border: '1px dashed var(--border)', borderRadius: 8, padding: 12 }}>
                             No AI zones configured. Without zones, events are accepted from the full frame.
                           </div>
                         ) : (
@@ -1155,13 +1155,13 @@ const Settings: React.FC = () => {
                         <div className={`dot ${cam.status === 'offline' ? 'offline' : cam.status === 'recording' ? 'recording' : 'online'}`} style={{ flexShrink: 0 }} />
                         <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
                           <div style={{ 
-                            fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-1)',
+                            fontWeight: 600, fontSize: '0.875rem', color: 'var(--t1)',
                             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
                           }} title={cam.name}>
                             {cam.name}
                           </div>
                           <div style={{ 
-                            fontSize: '0.72rem', color: 'var(--text-3)', marginTop: 2,
+                            fontSize: '0.72rem', color: 'var(--t3)', marginTop: 2,
                             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
                           }}>
                             {[
@@ -1175,7 +1175,7 @@ const Settings: React.FC = () => {
                           <span style={{
                             fontSize: '0.68rem', padding: '2px 8px', borderRadius: 20, flexShrink: 0,
                             background: cam.status === 'offline' ? 'rgba(255,255,255,0.04)' : cam.status === 'recording' ? 'var(--red-dim)' : 'var(--green-dim)',
-                            color: cam.status === 'offline' ? 'var(--text-3)' : cam.status === 'recording' ? 'var(--red)' : 'var(--green)',
+                            color: cam.status === 'offline' ? 'var(--t3)' : cam.status === 'recording' ? 'var(--red)' : 'var(--green)',
                             fontWeight: 600, border: '1px solid',
                             borderColor: cam.status === 'offline' ? 'var(--border)' : cam.status === 'recording' ? 'rgba(255,23,68,0.3)' : 'rgba(0,230,118,0.3)',
                           }}>
@@ -1183,7 +1183,7 @@ const Settings: React.FC = () => {
                           </span>
                           {cam.manufacturer && (
                             <span style={{ 
-                              fontSize: '0.68rem', color: 'var(--text-3)', padding: '2px 8px', borderRadius: 20, border: '1px solid var(--border)',
+                              fontSize: '0.68rem', color: 'var(--t3)', padding: '2px 8px', borderRadius: 20, border: '1px solid var(--border)',
                               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
                             }} title={`${cam.manufacturer} ${cam.model}`}>
                               {cam.manufacturer} {cam.model}
@@ -1347,21 +1347,21 @@ const Settings: React.FC = () => {
                 </div>
 
                 <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-1)', marginBottom: 16 }}>Detection Capabilities</div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--t1)', marginBottom: 16 }}>Detection Capabilities</div>
                   
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '12px 16px', borderRadius: 8 }}>
                       <div>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-1)' }}>Person & Vehicle Tracking</div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-3)', marginTop: 2 }}>Identify and track objects in real-time across all streams.</div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--t1)' }}>Person & Vehicle Tracking</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--t3)', marginTop: 2 }}>Identify and track objects in real-time across all streams.</div>
                       </div>
                       <input type="checkbox" checked readOnly style={{ width: 18, height: 18, accentColor: 'var(--cyan)' }} />
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '12px 16px', borderRadius: 8 }}>
                       <div>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-1)' }}>Face Recognition</div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-3)', marginTop: 2 }}>Extract and match facial embeddings against the known database.</div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--t1)' }}>Face Recognition</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--t3)', marginTop: 2 }}>Extract and match facial embeddings against the known database.</div>
                       </div>
                       <input
                         type="checkbox"
@@ -1373,8 +1373,8 @@ const Settings: React.FC = () => {
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '12px 16px', borderRadius: 8 }}>
                       <div>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-1)' }}>Automatic License Plate Recognition (ALPR)</div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-3)', marginTop: 2 }}>Detect and read vehicle license plates using OCR.</div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--t1)' }}>Automatic License Plate Recognition (ALPR)</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--t3)', marginTop: 2 }}>Detect and read vehicle license plates using OCR.</div>
                       </div>
                       <input
                         type="checkbox"
@@ -1400,7 +1400,7 @@ const Settings: React.FC = () => {
                     value={Math.round(systemConfig.ai.min_confidence * 100)}
                     onChange={e => setSystemConfig(c => ({ ...c, ai: { ...c.ai, min_confidence: parseInt(e.target.value) / 100 } }))}
                   />
-                  <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: 4 }}>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--t3)', marginTop: 4 }}>
                     Higher thresholds reduce false positives but may miss objects in poor lighting.
                   </div>
                 </div>
@@ -1428,7 +1428,7 @@ const Settings: React.FC = () => {
                       <option value="gemini">Google Gemini VLM (Gemini 1.5 Flash)</option>
                       <option value="openai">OpenAI GPT VLM (GPT-4o mini)</option>
                     </select>
-                    <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: 4 }}>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--t3)', marginTop: 4 }}>
                       Select the LLM/VLM backend used to run advanced visual description summaries and function tool-calling commands.
                     </div>
                   </div>
@@ -1444,7 +1444,7 @@ const Settings: React.FC = () => {
                           onChange={e => setSystemConfig(c => ({ ...c, ai: { ...c.ai, gemini_api_key: e.target.value } }))}
                           placeholder="AIzaSy..."
                         />
-                        <KeyRound size={14} style={{ position: 'absolute', right: 12, top: 12, color: 'var(--text-3)' }} />
+                        <KeyRound size={14} style={{ position: 'absolute', right: 12, top: 12, color: 'var(--t3)' }} />
                       </div>
                     </div>
                   )}
@@ -1460,7 +1460,7 @@ const Settings: React.FC = () => {
                           onChange={e => setSystemConfig(c => ({ ...c, ai: { ...c.ai, openai_api_key: e.target.value } }))}
                           placeholder="sk-proj-..."
                         />
-                        <KeyRound size={14} style={{ position: 'absolute', right: 12, top: 12, color: 'var(--text-3)' }} />
+                        <KeyRound size={14} style={{ position: 'absolute', right: 12, top: 12, color: 'var(--t3)' }} />
                       </div>
                     </div>
                   )}
@@ -1525,7 +1525,7 @@ const Settings: React.FC = () => {
                       }
                     }))}
                   />
-                  <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: 4 }}>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--t3)', marginTop: 4 }}>
                     Required for viewing live streams outside your local network. One server per line.
                   </div>
                 </div>
@@ -1538,8 +1538,8 @@ const Settings: React.FC = () => {
                     style={{ width: 16, height: 16, accentColor: 'var(--cyan)' }}
                   />
                   <div>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-1)' }}>Enable HTTPS / SSL (Let's Encrypt)</div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--text-3)', marginTop: 2 }}>Automatically provision certificates for external access.</div>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--t1)' }}>Enable HTTPS / SSL (Let's Encrypt)</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--t3)', marginTop: 2 }}>Automatically provision certificates for external access.</div>
                   </div>
                 </div>
 
@@ -1570,26 +1570,26 @@ const Settings: React.FC = () => {
                     ].map(([k, v]) => (
                       <div key={k} style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px dashed rgba(255,255,255,0.05)' }}>
                         <span>{k}</span>
-                        <span style={{ color: 'var(--text-1)', fontFamily: 'JetBrains Mono' }}>{v}</span>
+                        <span style={{ color: 'var(--t1)', fontFamily: 'JetBrains Mono' }}>{v}</span>
                       </div>
                     ))}
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12, marginTop: 10 }}>
                     <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 700 }}>CPU Usage</div>
-                      <div style={{ fontSize: '1.2rem', color: 'var(--text-1)', fontWeight: 600, fontFamily: 'JetBrains Mono' }}>12.4%</div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--t3)', textTransform: 'uppercase', fontWeight: 700 }}>CPU Usage</div>
+                      <div style={{ fontSize: '1.2rem', color: 'var(--t1)', fontWeight: 600, fontFamily: 'JetBrains Mono' }}>12.4%</div>
                     </div>
                     <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 700 }}>RAM Usage</div>
-                      <div style={{ fontSize: '1.2rem', color: 'var(--text-1)', fontWeight: 600, fontFamily: 'JetBrains Mono' }}>4.1 GB</div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--t3)', textTransform: 'uppercase', fontWeight: 700 }}>RAM Usage</div>
+                      <div style={{ fontSize: '1.2rem', color: 'var(--t1)', fontWeight: 600, fontFamily: 'JetBrains Mono' }}>4.1 GB</div>
                     </div>
                     <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 700 }}>GPU / TPU Util</div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--t3)', textTransform: 'uppercase', fontWeight: 700 }}>GPU / TPU Util</div>
                       <div style={{ fontSize: '1.2rem', color: 'var(--cyan)', fontWeight: 600, fontFamily: 'JetBrains Mono' }}>42.8%</div>
                     </div>
                     <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', textTransform: 'uppercase', fontWeight: 700 }}>Temperature</div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--t3)', textTransform: 'uppercase', fontWeight: 700 }}>Temperature</div>
                       <div style={{ fontSize: '1.2rem', color: 'var(--green)', fontWeight: 600, fontFamily: 'JetBrains Mono' }}>48°C</div>
                     </div>
                   </div>
@@ -1622,8 +1622,8 @@ const Settings: React.FC = () => {
                 <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                     <div>
-                      <div style={{ fontWeight: 600, color: 'var(--text-1)', fontSize: '0.85rem' }}>Auto Update Facility</div>
-                      <div style={{ color: 'var(--text-3)', fontSize: '0.72rem', marginTop: 3 }}>Checks the Sentinel update manifest and downloads the target when enabled.</div>
+                      <div style={{ fontWeight: 600, color: 'var(--t1)', fontSize: '0.85rem' }}>Auto Update Facility</div>
+                      <div style={{ color: 'var(--t3)', fontSize: '0.72rem', marginTop: 3 }}>Checks the Sentinel update manifest and downloads the target when enabled.</div>
                     </div>
                     <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--t2)', fontSize: '0.8rem', cursor: 'pointer' }}>
                       <input
@@ -1664,24 +1664,24 @@ const Settings: React.FC = () => {
 
                   {updateInfo && (
                     <div style={{ marginTop: 14, padding: 16, border: '1px solid var(--border)', borderRadius: 8, background: 'rgba(255,255,255,0.02)' }}>
-                      <div style={{ fontWeight: 600, color: 'var(--text-1)', marginBottom: 8, fontSize: '0.85rem' }}>Update Information</div>
+                      <div style={{ fontWeight: 600, color: 'var(--t1)', marginBottom: 8, fontSize: '0.85rem' }}>Update Information</div>
                       <div style={{ fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: 6 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                           <span style={{ color: 'var(--t2)' }}>Manifest:</span>
-                          <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{updateInfo.manifest_url || systemConfig.updates.manifest_url}</span>
+                          <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--t1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{updateInfo.manifest_url || systemConfig.updates.manifest_url}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                           <span style={{ color: 'var(--t2)' }}>Current Commit:</span>
-                          <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)' }}>{updateInfo.current_sha}</span>
+                          <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--t1)' }}>{updateInfo.current_sha}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                           <span style={{ color: 'var(--t2)' }}>Latest Commit:</span>
-                          <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)' }}>{updateInfo.latest_sha}</span>
+                          <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--t1)' }}>{updateInfo.latest_sha}</span>
                         </div>
                         {updateInfo.version && (
                           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                             <span style={{ color: 'var(--t2)' }}>Version:</span>
-                            <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)' }}>{updateInfo.version}</span>
+                            <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--t1)' }}>{updateInfo.version}</span>
                           </div>
                         )}
                         {updateInfo.error && (
@@ -1721,7 +1721,7 @@ const Settings: React.FC = () => {
                           {savingConfig ? 'Saving...' : 'Save Policy'}
                         </button>
                       </div>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: 4 }}>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--t3)', marginTop: 4 }}>
                         Recorded video files older than this will be deleted automatically to save space. Set to 0 to disable auto-purge.
                       </div>
                     </div>
@@ -1741,11 +1741,11 @@ const Settings: React.FC = () => {
                         <button className="btn btn-ghost" onClick={runVacuum} disabled={runningVac}>
                           {runningVac ? 'Optimizing...' : <><Database size={14} /> Re-index DB</>}
                         </button>
-                        <span style={{ color: 'var(--text-3)', fontSize: '0.72rem' }}>
+                        <span style={{ color: 'var(--t3)', fontSize: '0.72rem' }}>
                           Current archive: {storageReport ? `${storageReport.total_gb} GB` : 'loading...'}
                         </span>
                       </div>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: 4 }}>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--t3)', marginTop: 4 }}>
                         Deletes all MP4 recording segments from disk. Camera settings and users are not changed.
                       </div>
                     </div>
@@ -1761,25 +1761,25 @@ const Settings: React.FC = () => {
                 <div style={{ padding: 24 }}>
                   <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
                     {Object.keys(streamDiagnostics).length === 0 ? (
-                      <div style={{ padding: 14, color: 'var(--text-3)', fontSize: '0.78rem' }}>No active recorder diagnostics available yet.</div>
+                      <div style={{ padding: 14, color: 'var(--t3)', fontSize: '0.78rem' }}>No active recorder diagnostics available yet.</div>
                     ) : (
                       Object.entries(streamDiagnostics).map(([cameraId, diag]) => (
                         <div key={cameraId} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1.4fr) minmax(85px, 0.7fr) minmax(85px, 0.7fr) minmax(130px, 1.2fr)', gap: 12, padding: '12px 14px', borderBottom: '1px solid var(--border)', alignItems: 'center', fontSize: '0.76rem' }}>
                           <div style={{ minWidth: 0 }}>
-                            <div style={{ color: 'var(--text-1)', fontWeight: 700 }}>{diag.camera_name || cameraNameById[cameraId] || cameraId}</div>
-                            <div style={{ color: 'var(--text-3)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{maskRtspPassword(diag.stream_url || '')}</div>
+                            <div style={{ color: 'var(--t1)', fontWeight: 700 }}>{diag.camera_name || cameraNameById[cameraId] || cameraId}</div>
+                            <div style={{ color: 'var(--t3)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{maskRtspPassword(diag.stream_url || '')}</div>
                           </div>
                           <div>
-                            <div style={{ color: 'var(--text-3)', fontSize: '0.65rem', textTransform: 'uppercase' }}>Status</div>
+                            <div style={{ color: 'var(--t3)', fontSize: '0.65rem', textTransform: 'uppercase' }}>Status</div>
                             <div style={{ color: diag.task_done ? 'var(--red)' : 'var(--green)', fontWeight: 700 }}>{diag.task_done ? 'Stopped' : diag.status}</div>
                           </div>
                           <div>
-                            <div style={{ color: 'var(--text-3)', fontSize: '0.65rem', textTransform: 'uppercase' }}>Restarts</div>
-                            <div style={{ color: diag.restart_count > 0 ? 'var(--amber)' : 'var(--text-1)', fontFamily: 'JetBrains Mono' }}>{diag.restart_count}</div>
+                            <div style={{ color: 'var(--t3)', fontSize: '0.65rem', textTransform: 'uppercase' }}>Restarts</div>
+                            <div style={{ color: diag.restart_count > 0 ? 'var(--amber)' : 'var(--t1)', fontFamily: 'JetBrains Mono' }}>{diag.restart_count}</div>
                           </div>
                           <div style={{ minWidth: 0 }}>
-                            <div style={{ color: 'var(--text-3)', fontSize: '0.65rem', textTransform: 'uppercase' }}>Last Error</div>
-                            <div style={{ color: diag.last_error ? 'var(--amber)' : 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{diag.last_error || 'None'}</div>
+                            <div style={{ color: 'var(--t3)', fontSize: '0.65rem', textTransform: 'uppercase' }}>Last Error</div>
+                            <div style={{ color: diag.last_error ? 'var(--amber)' : 'var(--t3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{diag.last_error || 'None'}</div>
                           </div>
                         </div>
                       ))
@@ -1817,7 +1817,7 @@ const Settings: React.FC = () => {
                       <span className="card-title" style={{ color: 'var(--red)' }}>Confirm Factory Reset</span>
                     </div>
                     <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                      <div style={{ fontSize: '0.85rem', color: 'var(--text-1)' }}>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--t1)' }}>
                         Are you absolutely sure? This will permanently delete all cameras, recording segments, databases, and configuration settings.
                       </div>
                       <div className="form-group">
@@ -1827,7 +1827,7 @@ const Settings: React.FC = () => {
                           value={factoryResetConfirmText} 
                           onChange={e => setFactoryResetConfirmText(e.target.value)}
                           placeholder="RESET"
-                          style={{ border: '1px solid var(--red)', width: '100%', background: 'var(--bg-1)', color: 'var(--text-1)', padding: '8px 12px', borderRadius: 4 }}
+                          style={{ border: '1px solid var(--red)', width: '100%', background: 'var(--bg-1)', color: 'var(--t1)', padding: '8px 12px', borderRadius: 4 }}
                         />
                       </div>
                       <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 12 }}>
@@ -1961,8 +1961,8 @@ const Settings: React.FC = () => {
                         <div key={user.id} className="cam-row">
                           <ShieldCheck size={15} color={user.role === 'admin' ? 'var(--green)' : 'var(--cyan)'} />
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 700, color: 'var(--text-1)' }}>{user.username}</div>
-                            <div style={{ fontSize: '0.72rem', color: 'var(--text-3)', marginTop: 2 }}>
+                            <div style={{ fontWeight: 700, color: 'var(--t1)' }}>{user.username}</div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--t3)', marginTop: 2 }}>
                               {user.permissions.join(', ') || 'No permissions'}
                             </div>
                           </div>
@@ -2010,7 +2010,7 @@ const Settings: React.FC = () => {
           position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
           background: 'var(--bg-card)', border: '1px solid var(--cyan-border)',
           borderRadius: 'var(--radius-md)', padding: '12px 18px',
-          fontSize: '0.85rem', color: 'var(--text-1)',
+          fontSize: '0.85rem', color: 'var(--t1)',
           boxShadow: '0 4px 24px rgba(0,0,0,0.6)',
           backdropFilter: 'blur(12px)',
           animation: 'fadeIn 0.2s ease',
