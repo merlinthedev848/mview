@@ -1165,6 +1165,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .card-head {
