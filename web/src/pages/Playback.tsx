@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Play, Pause, RotateCcw, RotateCw, SkipBack, SkipForward, 
   Search, Video, Download, Maximize2 
@@ -47,6 +48,10 @@ interface CameraEvent {
 }
 
 const Playback: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const initCamId = searchParams.get('camera');
+  const initTimeParam = searchParams.get('time');
+
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [selectedCam, setSelectedCam] = useState<Camera | null>(null);
   const [recordings, setRecordings] = useState<RecordingFile[]>([]);
@@ -63,12 +68,36 @@ const Playback: React.FC = () => {
   const [activeFile, setActiveFile] = useState<RecordingFile | null>(null);
   const [buffering, setBuffering] = useState(false);
   const [videoError, setVideoError] = useState('');
-  const [jumpDate, setJumpDate] = useState(() => inputDate(new Date()));
-  const [jumpTime, setJumpTime] = useState(() => inputTime(new Date()));
+  const [jumpDate, setJumpDate] = useState(() => {
+    if (initTimeParam) {
+      const d = new Date(initTimeParam);
+      if (!isNaN(d.getTime())) return inputDate(d);
+    }
+    return inputDate(new Date());
+  });
+  const [jumpTime, setJumpTime] = useState(() => {
+    if (initTimeParam) {
+      const d = new Date(initTimeParam);
+      if (!isNaN(d.getTime())) return inputTime(d);
+    }
+    return inputTime(new Date());
+  });
 
   // Timeline window (default 6-hour range)
-  const [timelineStart, setTimelineStart] = useState<number>(Date.now() - 3 * 3600 * 1000);
-  const [timelineEnd, setTimelineEnd] = useState<number>(Date.now() + 3 * 3600 * 1000);
+  const [timelineStart, setTimelineStart] = useState<number>(() => {
+    if (initTimeParam) {
+      const d = new Date(initTimeParam);
+      if (!isNaN(d.getTime())) return d.getTime() - 3 * 3600 * 1000;
+    }
+    return Date.now() - 3 * 3600 * 1000;
+  });
+  const [timelineEnd, setTimelineEnd] = useState<number>(() => {
+    if (initTimeParam) {
+      const d = new Date(initTimeParam);
+      if (!isNaN(d.getTime())) return d.getTime() + 3 * 3600 * 1000;
+    }
+    return Date.now() + 3 * 3600 * 1000;
+  });
 
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<{ x: number; start: number; end: number } | null>(null);
@@ -89,6 +118,13 @@ const Playback: React.FC = () => {
           const data = await res.json();
           setCameras(data);
           if (data.length > 0) {
+            if (initCamId) {
+              const cam = data.find((c: Camera) => c.id === initCamId);
+              if (cam) {
+                setSelectedCam(cam);
+                return;
+              }
+            }
             setSelectedCam(data[0]);
           }
         }
@@ -98,11 +134,12 @@ const Playback: React.FC = () => {
       setLoading(false);
     };
     loadCameras();
-  }, []);
+  }, [initCamId]);
 
   // ── 2. Load recordings and events for selected camera ──────────────
   useEffect(() => {
     if (!selectedCam) return;
+    let isMounted = true;
 
     const loadData = async () => {
       try {
@@ -146,7 +183,7 @@ const Playback: React.FC = () => {
             }
             recs[i].endTimestamp = end;
           }
-          setRecordings(recs);
+          if (isMounted) setRecordings(recs);
         }
 
         let evs: CameraEvent[] = [];
@@ -156,30 +193,38 @@ const Playback: React.FC = () => {
             ...e,
             timestampMs: new Date(e.timestamp).getTime()
           }));
-          setEvents(evs);
+          if (isMounted) setEvents(evs);
         }
 
         // Initialize timeline and active file
-        if (recs.length > 0) {
-          // Select the latest file by default
-          const latestFile = recs[recs.length - 1];
-          setActiveFile(latestFile);
-          
-          const initialTime = latestFile.startTimestamp;
-          setCurrentTimeMs(initialTime);
+        if (isMounted && recs.length > 0) {
+          let targetTime = 0;
+          let targetFile = recs[recs.length - 1];
 
-          // Center timeline on this segment
-          setTimelineStart(initialTime - 2 * 3600 * 1000);
-          setTimelineEnd(initialTime + 4 * 3600 * 1000);
+          if (initTimeParam) {
+            const t = new Date(initTimeParam).getTime();
+            if (!isNaN(t)) {
+              targetTime = t;
+              // Find the file containing this time
+              const f = recs.find(r => targetTime >= r.startTimestamp && targetTime < r.endTimestamp);
+              if (f) targetFile = f;
+            }
+          }
+
+          if (!targetTime) {
+            targetTime = targetFile.startTimestamp;
+          }
+
+          setActiveFile(targetFile);
+          setCurrentTimeMs(targetTime);
         } else {
           setActiveFile(null);
-          setCurrentTimeMs(0);
-          setTimelineStart(Date.now() - 3 * 3600 * 1000);
-          setTimelineEnd(Date.now() + 3 * 3600 * 1000);
+          setRecordings([]);
         }
       } catch (err) {
-        console.error("Error loading playback data:", err);
+        console.error('Failed to load recordings', err);
       }
+      setLoading(false);
     };
 
     loadData();

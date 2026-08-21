@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Activity, AlertTriangle, Camera, HardDrive, Play } from 'lucide-react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from 'recharts';
 import VideoPlayer from '../components/VideoPlayer';
@@ -47,6 +48,8 @@ export const Dashboard = () => {
   const [storage, setStorage] = useState<{ total_gb: number; used_gb: number; usage_percent: number } | null>(null);
   const [stats, setStats] = useState({ total_cameras: 0, online_cameras: 0, events_today: 0 });
   const [analytics, setAnalytics] = useState<{ total_events: number; hourly: { hour: string; count: number }[]; top_classes: { class: string; count: number }[] } | null>(null);
+
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -224,7 +227,23 @@ export const Dashboard = () => {
                   </div>
                 ) : (
                   events.map(event => (
-                    <div key={event.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.025)' }}>
+                    <div 
+                      key={event.id} 
+                      onClick={() => navigate(`/playback?camera=${event.camera_id}&time=${event.timestamp}`)}
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: 10, 
+                        padding: 10, 
+                        borderRadius: 8, 
+                        border: '1px solid var(--border)', 
+                        background: 'rgba(255,255,255,0.025)',
+                        cursor: 'pointer',
+                        transition: 'background 0.2s ease'
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+                      onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.025)'}
+                    >
                       <div style={{ width: 48, height: 48, borderRadius: 6, overflow: 'hidden', flexShrink: 0, border: '1px solid var(--border)' }}>
                         <img 
                           src={apiUrl(`/events/${event.id}/thumbnail`)} 

@@ -22,7 +22,7 @@ def _load_yaml_config(path: str | None = None) -> dict[str, Any]:
         path,
         os.environ.get("SENTINEL_CONFIG_FILE"),
         "/etc/sentinel/sentinel.yml",
-        "/opt/sentinel/sentinel.yml",
+        "/opt/mview-sentinel/sentinel.yml",
         str(Path.cwd() / "sentinel.yml"),
     ]
     for p in search_paths:
@@ -108,9 +108,9 @@ class Settings(BaseSettings):
         default="/mnt/storage/mview",
         validation_alias=AliasChoices("SENTINEL_STORAGE_PATH", "STORAGE_PATH"),
     )
-    thumbnail_path: str = "/opt/sentinel/thumbnails"
-    snapshot_path: str = "/opt/sentinel/snapshots"
-    export_path: str = "/opt/sentinel/exports"
+    thumbnail_path: str = "/opt/mview-sentinel/thumbnails"
+    snapshot_path: str = "/opt/mview-sentinel/snapshots"
+    export_path: str = "/opt/mview-sentinel/exports"
     retention_days: int = Field(
         default=30,
         validation_alias=AliasChoices("SENTINEL_RETENTION_DAYS", "RETENTION_DAYS"),

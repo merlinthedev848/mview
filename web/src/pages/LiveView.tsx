@@ -343,6 +343,15 @@ const CameraFeedComponent: React.FC<{
             <img 
               src={go2rtcUrl(`/api/stream.mjpeg?src=${encodeURIComponent(streamName)}`)}
               alt="MJPEG Fallback"
+              onError={(e) => {
+                const target = e.currentTarget as HTMLImageElement;
+                if (!target.dataset.retrying) {
+                  target.dataset.retrying = "true";
+                  setTimeout(() => {
+                    target.src = apiUrl(`/cameras/${cam.id}/snapshot?t=${Date.now()}`);
+                  }, 1000);
+                }
+              }}
               style={{ 
                 width: '100%', 
                 height: '100%', 
@@ -354,24 +363,43 @@ const CameraFeedComponent: React.FC<{
               }} 
             />
           ) : (
-            <video 
-              ref={videoRef} 
-              autoPlay 
-              playsInline 
-              muted={isMuted} 
-              style={{ 
-                width: '100%', 
-                height: '100%', 
-                objectFit: 'cover',
-                transform: isZoomMode ? `scale(${zoomScale}) translate(${zoomOffset.x}px, ${zoomOffset.y}px)` : 'none',
-                transformOrigin: 'center center',
-                transition: isPanning ? 'none' : 'transform 0.1s ease',
-                cursor: isZoomMode ? (isPanning ? 'grabbing' : 'grab') : 'default'
-              }} 
-            />
+            <>
+              {!connected && (
+                <img 
+                  src={apiUrl(`/cameras/${cam.id}/snapshot`)}
+                  alt={cam.name}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    zIndex: 1,
+                    pointerEvents: 'none'
+                  }}
+                />
+              )}
+              <video 
+                ref={videoRef} 
+                autoPlay 
+                playsInline 
+                muted={isMuted} 
+                style={{ 
+                  width: '100%', 
+                  height: '100%', 
+                  objectFit: 'cover',
+                  opacity: connected ? 1 : 0,
+                  transform: isZoomMode ? `scale(${zoomScale}) translate(${zoomOffset.x}px, ${zoomOffset.y}px)` : 'none',
+                  transformOrigin: 'center center',
+                  transition: isPanning ? 'none' : 'transform 0.1s ease, opacity 0.3s ease',
+                  cursor: isZoomMode ? (isPanning ? 'grabbing' : 'grab') : 'default'
+                }} 
+              />
+            </>
           )}
           {!connected && (
-            <div className="cam-connecting">
+            <div className="cam-connecting" style={{ zIndex: 2 }}>
               <div className="spinner" />
               <span style={{ fontSize: '0.72rem', color: 'var(--t3)' }}>Connecting...</span>
             </div>
