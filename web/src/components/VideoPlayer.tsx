@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, Maximize, Mic, Video as VideoIcon, Activity, Focus, Volume2, VolumeX } from 'lucide-react';
+import { Camera, Maximize, Minimize, Mic, Video as VideoIcon, Activity, Focus, Volume2, VolumeX } from 'lucide-react';
 import { go2rtcUrl, apiUrl } from '../lib/endpoints';
 
 interface VideoPlayerProps {
@@ -24,6 +24,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
   const [zoomOffset, setZoomOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+  }, []);
 
   const panStart = useRef({ x: 0, y: 0 });
   const micStreamRef = useRef<MediaStream | null>(null);
@@ -147,11 +154,19 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
 
   // 1. Fullscreen
   const handleFullscreen = () => {
-    if (containerRef.current) {
-      if (containerRef.current.requestFullscreen) {
-        containerRef.current.requestFullscreen();
-      } else if ((containerRef.current as any).webkitRequestFullscreen) {
-        (containerRef.current as any).webkitRequestFullscreen();
+    if (!document.fullscreenElement) {
+      if (containerRef.current) {
+        if (containerRef.current.requestFullscreen) {
+          containerRef.current.requestFullscreen();
+        } else if ((containerRef.current as any).webkitRequestFullscreen) {
+          (containerRef.current as any).webkitRequestFullscreen();
+        }
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if ((document as any).webkitExitFullscreen) {
+        (document as any).webkitExitFullscreen();
       }
     }
   };
@@ -475,7 +490,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ cameraId, name, status, hasMo
           style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: '4px' }} 
           title="Fullscreen Mode"
         >
-          <Maximize size={18} />
+          {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
         </button>
       </div>
       
