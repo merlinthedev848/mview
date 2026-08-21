@@ -880,7 +880,7 @@ const Settings: React.FC = () => {
       {/* Top Bar */}
       <div className="topbar settings-page-topbar" style={{ justifyContent: 'space-between' }}>
         <h1 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-1)' }}>System Configuration</h1>
-        <span style={{ fontSize: '0.8rem', color: 'var(--text-2)' }}>Manage hardware, AI pipelines and network settings</span>
+        <span style={{ fontSize: '0.8rem', color: 'var(--t2)' }}>Manage hardware, AI pipelines and network settings</span>
       </div>
 
       <div className="settings-page-layout" style={{ flex: 1, display: 'grid', gridTemplateColumns: '200px 1fr', gap: 16, padding: 20, overflow: 'hidden', minHeight: 0 }}>
@@ -1141,9 +1141,9 @@ const Settings: React.FC = () => {
                 )}
 
                 {cameras.length === 0 ? (
-                  <div className="empty-state">
-                    <div className="empty-state-title">No cameras added yet</div>
-                    <div className="empty-state-sub">Use "Add Camera Manually" above or auto-discover ONVIF devices below.</div>
+                  <div className="empty">
+                    <div className="empty-title">No cameras added yet</div>
+                    <div className="empty-sub">Use "Add Camera Manually" above or auto-discover ONVIF devices below.</div>
                   </div>
                 ) : (
                   <div>
@@ -1252,7 +1252,7 @@ const Settings: React.FC = () => {
                   </button>
                 </div>
 
-                <div style={{ padding: '12px 20px', fontSize: '0.8rem', color: 'var(--text-2)', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ padding: '16px 20px', fontSize: '0.82rem', color: 'var(--t2)', borderBottom: '1px solid var(--border)', lineHeight: 1.5, background: 'rgba(0,0,0,0.1)' }}>
                   <strong style={{ color: 'var(--amber)' }}>⚠ Note:</strong> ONVIF WS-Discovery uses UDP multicast.
                   If the API runs inside Docker with bridge networking, cameras on your LAN may not be reachable.
                   For best results, add the line <code style={{ background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: 3 }}>network_mode: host</code> to
@@ -1303,8 +1303,8 @@ const Settings: React.FC = () => {
                 )}
 
                 {!discovering && discovered.length === 0 && !discoveryError && (
-                  <div className="empty-state">
-                    <div className="empty-state-sub">Click "Scan Network" to search for ONVIF cameras on your local network.</div>
+                  <div className="empty">
+                    <div className="empty-sub">Click "Scan Network" to search for ONVIF cameras on your local network.</div>
                   </div>
                 )}
               </div>
@@ -1559,7 +1559,7 @@ const Settings: React.FC = () => {
                   <span className="card-title">System Information</span>
                 </div>
                 <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16, color: 'var(--text-2)', fontSize: '0.85rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16, color: 'var(--t2)', fontSize: '0.85rem' }}>
                     {[
                       ['Platform', 'mView Sentinel NVR'],
                       ['Version', 'v1.0.0-beta.5-auth-fix'],
@@ -1625,7 +1625,7 @@ const Settings: React.FC = () => {
                       <div style={{ fontWeight: 600, color: 'var(--text-1)', fontSize: '0.85rem' }}>Auto Update Facility</div>
                       <div style={{ color: 'var(--text-3)', fontSize: '0.72rem', marginTop: 3 }}>Checks the Sentinel update manifest and downloads the target when enabled.</div>
                     </div>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-2)', fontSize: '0.8rem', cursor: 'pointer' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--t2)', fontSize: '0.8rem', cursor: 'pointer' }}>
                       <input
                         type="checkbox"
                         checked={systemConfig.updates.auto_download}
@@ -1667,20 +1667,20 @@ const Settings: React.FC = () => {
                       <div style={{ fontWeight: 600, color: 'var(--text-1)', marginBottom: 8, fontSize: '0.85rem' }}>Update Information</div>
                       <div style={{ fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: 6 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                          <span style={{ color: 'var(--text-2)' }}>Manifest:</span>
+                          <span style={{ color: 'var(--t2)' }}>Manifest:</span>
                           <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{updateInfo.manifest_url || systemConfig.updates.manifest_url}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ color: 'var(--text-2)' }}>Current Commit:</span>
+                          <span style={{ color: 'var(--t2)' }}>Current Commit:</span>
                           <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)' }}>{updateInfo.current_sha}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ color: 'var(--text-2)' }}>Latest Commit:</span>
+                          <span style={{ color: 'var(--t2)' }}>Latest Commit:</span>
                           <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)' }}>{updateInfo.latest_sha}</span>
                         </div>
                         {updateInfo.version && (
                           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span style={{ color: 'var(--text-2)' }}>Version:</span>
+                            <span style={{ color: 'var(--t2)' }}>Version:</span>
                             <span style={{ fontFamily: 'JetBrains Mono', color: 'var(--text-1)' }}>{updateInfo.version}</span>
                           </div>
                         )}
@@ -1795,7 +1795,7 @@ const Settings: React.FC = () => {
                     <span className="card-title" style={{ color: 'var(--red)' }}>DANGER ZONE</span>
                   </div>
                   <div style={{ padding: 24 }}>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-2)', marginBottom: 16 }}>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--t2)', marginBottom: 16 }}>
                       Factory resetting will stop all camera recorders, wipe all recording files from storage, remove all cameras from the configuration, and clear system logs. The NVR will be reset to default settings. <strong>This action cannot be undone.</strong>
                     </div>
                     <button 
@@ -1821,7 +1821,7 @@ const Settings: React.FC = () => {
                         Are you absolutely sure? This will permanently delete all cameras, recording segments, databases, and configuration settings.
                       </div>
                       <div className="form-group">
-                        <label className="form-label" style={{ color: 'var(--text-2)' }}>Type <strong>RESET</strong> to confirm:</label>
+                        <label className="form-label" style={{ color: 'var(--t2)' }}>Type <strong>RESET</strong> to confirm:</label>
                         <input 
                           className="form-input" 
                           value={factoryResetConfirmText} 
@@ -1874,7 +1874,7 @@ const Settings: React.FC = () => {
 
               {!isAdmin ? (
                 <div className="card">
-                  <div style={{ padding: 24, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ padding: 24, color: 'var(--t2)', display: 'flex', alignItems: 'center', gap: 10 }}>
                     <ShieldCheck size={18} color="var(--cyan)" />
                     User administration is available to admin accounts only.
                   </div>
@@ -1924,7 +1924,7 @@ const Settings: React.FC = () => {
                       </div>
                       <div style={{ gridColumn: '1 / -1', display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'center', paddingTop: 8 }}>
                         {permissionOptions.map(permission => (
-                          <label key={permission} style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-2)', fontSize: '0.8rem', textTransform: 'capitalize' }}>
+                          <label key={permission} style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--t2)', fontSize: '0.8rem', textTransform: 'capitalize' }}>
                             <input
                               type="checkbox"
                               checked={newUser.permissions.includes(permission)}
@@ -1953,8 +1953,8 @@ const Settings: React.FC = () => {
                     </div>
                     {usersError && <div style={{ padding: '12px 20px', color: 'var(--red)' }}>{usersError}</div>}
                     {users.length === 0 ? (
-                      <div className="empty-state">
-                        <div className="empty-state-sub">No users loaded yet.</div>
+                      <div className="empty">
+                        <div className="empty-sub">No users loaded yet.</div>
                       </div>
                     ) : (
                       users.map(user => (
@@ -1979,7 +1979,7 @@ const Settings: React.FC = () => {
                           <div style={{ display: 'flex', gap: 6 }}>
                             <button
                               className="btn btn-ghost"
-                              style={{ padding: '6px 10px', color: 'var(--text-2)', border: '1px solid var(--border)' }}
+                              style={{ padding: '6px 10px', color: 'var(--t2)', border: '1px solid var(--border)' }}
                               onClick={() => startEditUser(user)}
                             >
                               <Edit2 size={14} />
