@@ -1152,10 +1152,18 @@ const Settings: React.FC = () => {
                         display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px',
                         borderBottom: '1px solid var(--border)',
                       }}>
-                        <div className={`dot ${cam.status === 'offline' ? 'offline' : cam.status === 'recording' ? 'recording' : 'online'}`} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-1)' }}>{cam.name}</div>
-                          <div style={{ fontSize: '0.72rem', color: 'var(--text-3)', marginTop: 2 }}>
+                        <div className={`dot ${cam.status === 'offline' ? 'offline' : cam.status === 'recording' ? 'recording' : 'online'}`} style={{ flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                          <div style={{ 
+                            fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-1)',
+                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                          }} title={cam.name}>
+                            {cam.name}
+                          </div>
+                          <div style={{ 
+                            fontSize: '0.72rem', color: 'var(--text-3)', marginTop: 2,
+                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                          }}>
                             {[
                               cam.resolution,
                               cam.enabled === false ? 'Recording disabled' : cam.config?.record_substream ? 'Recording substream' : 'Recording main stream',
@@ -1163,9 +1171,9 @@ const Settings: React.FC = () => {
                             ].filter(Boolean).join(' / ')}
                           </div>
                         </div>
-                        <div style={{ display: 'flex', gap: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, maxWidth: '35%' }}>
                           <span style={{
-                            fontSize: '0.68rem', padding: '2px 8px', borderRadius: 20,
+                            fontSize: '0.68rem', padding: '2px 8px', borderRadius: 20, flexShrink: 0,
                             background: cam.status === 'offline' ? 'rgba(255,255,255,0.04)' : cam.status === 'recording' ? 'var(--red-dim)' : 'var(--green-dim)',
                             color: cam.status === 'offline' ? 'var(--text-3)' : cam.status === 'recording' ? 'var(--red)' : 'var(--green)',
                             fontWeight: 600, border: '1px solid',
@@ -1174,12 +1182,15 @@ const Settings: React.FC = () => {
                             {cam.status.toUpperCase()}
                           </span>
                           {cam.manufacturer && (
-                            <span style={{ fontSize: '0.68rem', color: 'var(--text-3)', padding: '2px 8px', borderRadius: 20, border: '1px solid var(--border)' }}>
+                            <span style={{ 
+                              fontSize: '0.68rem', color: 'var(--text-3)', padding: '2px 8px', borderRadius: 20, border: '1px solid var(--border)',
+                              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                            }} title={`${cam.manufacturer} ${cam.model}`}>
                               {cam.manufacturer} {cam.model}
                             </span>
                           )}
                         </div>
-                        <div style={{ display: 'flex', gap: 6 }}>
+                        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                           <button
                             className="btn btn-ghost"
                             style={{ padding: '6px 10px' }}
